@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Confirm MEL conversions - dovi-manager{% endblock %}
+{% block page_id %}bulk-confirm{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/candidates">Candidates</a>{{ icon("chevron-right") }}<span>Bulk safe MEL review</span>
+  </nav>
+  <section class="page-header focused-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("shield") }} Bulk safety review</div>
+      <h1>Queue all safe MEL candidates</h1>
+      <p>Review the complete batch before the jobs are queued and processed one at a time.</p>
+    </div>
+  </section>
+
+  {% if candidates %}
+    <div class="confirmation-layout">
+      <section class="panel confirmation-main">
+        <div class="batch-summary">
+          <span class="batch-count">{{ candidates|length }}</span>
+          <div><strong>Safe MEL candidate(s)</strong><span>Each file will receive its own serialized conversion job.</span></div>
+          <span class="badge category-mel">safe mel</span>
+        </div>
+        <div class="batch-list" aria-label="Files included in this batch">
+          {% for candidate in candidates %}
+            <div><span class="file-icon">{{ icon("file") }}</span><span><strong>{{ candidate.relative_path|path_name }}</strong><small>{{ candidate.relative_path|path_parent }}</small></span><span>{{ candidate.file_size|human_size }}</span></div>
+          {% endfor %}
+        </div>
+      </section>
+      <aside class="panel approval-panel">
+        <span class="eyebrow">Batch approval</span>
+        <h2>Queue {{ candidates|length }} conversion job(s)</h2>
+        <p>The worker will process these files sequentially. Every source backup is retained.</p>
+        <form action="/candidates/bulk-mel/convert" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label class="approval-check">
+            <input type="checkbox" name="approved" value="yes" required>
+            <span><strong>I reviewed this list</strong><small>I approve all listed safe MEL conversions.</small></span>
+          </label>
+          <div class="stacked-actions">
+            <button type="submit">{{ icon("bolt") }} Queue {{ candidates|length }} job(s)</button>
+            <a class="button secondary" href="/candidates">Cancel</a>
+          </div>
+        </form>
+      </aside>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-content">
+        <span class="empty-state-icon">{{ icon("shield") }}</span>
+        <h2>No safe MEL candidates</h2>
+        <p>There are no active safe MEL candidates available to queue.</p>
+        <div class="actions centered-actions"><a class="button secondary" href="/candidates">Return to candidates</a></div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

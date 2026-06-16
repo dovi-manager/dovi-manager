@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Backups - dovi-manager{% endblock %}
+{% block page_id %}backups{% endblock %}
+{% block content %}
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("backups") }} Source protection</div>
+      <h1>Original backups</h1>
+      <p>Every converted source remains protected until you explicitly select and confirm permanent deletion.</p>
+    </div>
+    <a class="button secondary" href="/settings">{{ icon("settings") }} Retention settings</a>
+  </section>
+
+  <div class="backup-metrics">
+    <article><span>{{ icon("backups") }}</span><div><small>Total backups</small><strong>{{ backups|length }}</strong><em>{{ total_size|human_size }} protected</em></div></article>
+    <article><span>{{ icon("clock") }}</span><div><small>Retention policy</small><strong>{{ retention_days }} days</strong><em>Minimum age before deletion</em></div></article>
+    <article><span>{{ icon("trash") }}</span><div><small>Eligible now</small><strong>{{ eligible_count }}</strong><em>{{ eligible_size|human_size }} can be reviewed{% if allow_retention_override and override_count %}; {{ override_count }} need override{% endif %}</em></div></article>
+  </div>
+
+  {% if backups %}
+    <form action="/backups/confirm" method="post" data-backup-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="selection-toolbar">
+        <div>
+          <button class="button secondary" type="button" data-select-eligible>{{ icon("check") }} Select all eligible</button>
+          <button class="button ghost" type="button" data-clear-selection>Clear</button>
+        </div>
+        <div class="selection-summary" aria-live="polite">
+          <strong data-selected-count>0 selected</strong>
+          <span data-selected-size>0.0 B</span>
+        </div>
+        <button class="danger" type="submit" data-review-deletions>{{ icon("trash") }} Review deletions</button>
+      </div>
+      <div class="table-wrap responsive-table backups-table">
+        <table>
+          <thead><tr><th class="checkbox-column"><span class="sr-only">Select</span></th><th>Backup file</th><th>Size</th><th>Age</th><th>Deletion status</th></tr></thead>
+          <tbody>
+            {% for backup in backups %}
+              <tr class="{% if not backup.eligible %}ineligible-row{% endif %}">
+                <td class="checkbox-column" data-label="Select">
+                  {% set override_allowed = allow_retention_override and backup.counterpart_exists and not backup.eligible and backup.age_days < retention_days %}
+                  <input type="checkbox" name="selected" value="{{ backup.selection_key }}" data-size="{{ backup.size }}" aria-label="Select {{ backup.relative_path }} in {{ backup.root_label }}" {% if override_allowed %}data-retention-override="true"{% endif %} {% if not backup.eligible and not override_allowed %}disabled{% endif %}>
+                </td>
+                <td data-label="Backup file">
+                  <span class="file-cell">
+                    <span class="file-icon">{{ icon("file") }}</span>
+                    <span><strong>{{ backup.relative_path|path_name }}</strong><small>{{ backup.root_label }} / {{ backup.relative_path|path_parent }}</small></span>
+                  </span>
+                </td>
+                <td data-label="Size">{{ backup.size|human_size }}</td>
+                <td data-label="Age"><span class="age-value">{{ backup.age_days }}</span> day(s)</td>
+                <td data-label="Deletion status">
+                  {% if backup.eligible %}
+                    <span class="status-text is-warning">{{ icon("check") }} Eligible for review</span>
+                  {% elif override_allowed %}
+                    <span class="status-text is-warning">{{ icon("alert") }} Needs retention override</span>
+                  {% else %}
+                    <span class="status-text">{{ icon("clock") }} {{ backup.reason }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-content">
+        <span class="empty-state-icon">{{ icon("backups") }}</span>
+        <h2>No source backups found</h2>
+        <p>No <code>.mkv.bak.dovi_convert</code> files were found below the configured media root.</p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

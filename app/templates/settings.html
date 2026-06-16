@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% from "macros/forms.html" import info_tip %}
+{% block title %}Settings - dovi-manager{% endblock %}
+{% block page_id %}settings{% endblock %}
+{% block content %}
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("settings") }} Configuration and diagnostics</div>
+      <h1>Settings and status</h1>
+      <p>Control scan defaults, safe conversion options, discovery automation, and retention without changing container deployment boundaries.</p>
+    </div>
+    <span class="readiness-chip {% if shell_ready %}is-ready{% else %}is-warning{% endif %}">
+      <span class="status-orb {% if shell_ready %}is-ready{% else %}is-warning{% endif %}"></span>
+      {{ "All systems ready" if shell_ready else "Attention required" }}
+    </span>
+  </section>
+
+  <div class="settings-layout">
+    <div class="settings-main">
+      <form class="settings-form-stack" action="/settings" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <section class="panel settings-section">
+            <div class="settings-section-header">
+              <span class="settings-icon">{{ icon("scan") }}</span>
+              <div><h2>Scan defaults</h2><p>These values are snapshotted when a scan job enters the queue.</p></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="scan_depth">Default recursive depth</label>{{ info_tip("Limits how many folder levels Full and Smart scans walk below each configured library root. A lower value reduces filesystem work but may miss deeply nested media.") }}</span><small>Used by Full and Smart scans; choose between 1 and 20.</small></div>
+              <div class="number-suffix"><input id="scan_depth" type="number" name="scan_depth" min="1" max="20" value="{{ runtime.scan_depth }}" required><span>levels</span></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="scan_debug">Debug scan logging</label>{{ info_tip("Requests additional diagnostic output from dovi_convert during scans. It helps troubleshoot parser or media issues but creates larger job logs and does not change classification behavior.") }}</span><small>Adds <code>--debug</code> to future scan jobs.</small></div>
+              <label class="switch"><input id="scan_debug" type="checkbox" name="scan_debug" value="yes" {% if runtime.scan_debug %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable debug scan logging</span></label>
+            </div>
+          </section>
+
+          <section class="panel settings-section">
+            <div class="settings-section-header">
+              <span class="settings-icon">{{ icon("terminal") }}</span>
+              <div><h2>Conversion defaults</h2><p>Safe CLI options only. Output, HDR10, force, delete, backup archives, and arbitrary arguments remain unavailable.</p></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="convert_safe_mode">Legacy safe mode</label>{{ info_tip("Uses dovi_convert's slower legacy extraction path instead of its normal optimized path. Enable it when the normal extraction path fails on a file. It does not enable force, deletion, or bypass any dovi-manager safety rule.") }}</span><small>Adds <code>--safe</code> to future conversion jobs for the slower extraction path.</small></div>
+              <label class="switch"><input id="convert_safe_mode" type="checkbox" name="convert_safe_mode" value="yes" {% if runtime.convert_safe_mode %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable conversion safe mode</span></label>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="convert_verbose">Verbose conversion logs</label>{{ info_tip("Records more detail from dovi_convert to help diagnose conversions. It changes logging only and does not change the generated Profile 8.1 media.") }}</span><small>Adds <code>--verbose</code> to future conversion jobs.</small></div>
+              <label class="switch"><input id="convert_verbose" type="checkbox" name="convert_verbose" value="yes" {% if runtime.convert_verbose %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable verbose conversion logs</span></label>
+            </div>
+            <div class="setting-row automation-row">
+              <div><span class="setting-label-line"><label for="auto_queue_mel">Automatic safe MEL queueing</label>{{ info_tip("After a successful scan, automatically queues conversion only for newly found or changed MEL candidates. Simple FEL remains manual and Complex FEL remains blocked.") }}</span><small>Queue only newly discovered or changed MEL candidates after successful scans.</small></div>
+              <label class="switch">
+                <input id="auto_queue_mel" type="checkbox" name="auto_queue_mel" value="yes" {% if runtime.auto_queue_mel %}checked{% endif %} data-automation-toggle data-initial="{{ 'true' if runtime.auto_queue_mel else 'false' }}">
+                <span aria-hidden="true"></span><span class="sr-only">Automatically queue safe MEL candidates</span>
+              </label>
+            </div>
+            <div class="setting-row dependent-setting">
+              <div><span class="setting-label-line"><label for="auto_convert_mel_after_inspect">Require successful full inspection</label>{{ info_tip("Queues a full frame-by-frame RPU inspection first. The automatic MEL conversion is created only when that inspection succeeds. A failed inspection leaves the file unchanged and does not queue conversion.") }}</span><small>Gate automatic MEL conversion on a successful inspection.</small></div>
+              <label class="switch">
+                <input id="auto_convert_mel_after_inspect" type="checkbox" name="auto_convert_mel_after_inspect" value="yes" {% if runtime.auto_convert_mel_after_inspect %}checked{% endif %} {% if not runtime.auto_queue_mel %}disabled{% endif %} data-inspection-gate>
+                <span aria-hidden="true"></span><span class="sr-only">Require successful MEL inspection before automatic conversion</span>
+              </label>
+            </div>
+            <div class="automation-disclosure" data-automation-disclosure>
+              <div class="alert alert-warning">
+                <span class="alert-icon">{{ icon("alert") }}</span>
+                <div><strong>Conversion automation modifies media</strong><span>It remains serialized and never includes Simple or Complex FEL files.</span></div>
+              </div>
+              <label class="approval-check compact-check">
+                <input type="checkbox" name="automation_acknowledged" value="yes" data-automation-ack>
+                <span><strong>I acknowledge the automation behavior</strong><small>Required when enabling this setting for the first time.</small></span>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel settings-section">
+            <div class="settings-section-header">
+              <span class="settings-icon">{{ icon("search") }}</span>
+              <div><h2>Automatic full inspection</h2><p>Optionally run frame-by-frame RPU analysis when a changed candidate is discovered.</p></div>
+            </div>
+            {% for value, label, checked in [
+              ("mel", "MEL candidates", runtime.auto_inspect_mel),
+              ("simple_fel", "Simple FEL candidates", runtime.auto_inspect_simple_fel),
+              ("complex_fel", "Complex FEL candidates", runtime.auto_inspect_complex_fel)
+            ] %}
+              <div class="setting-row">
+                <div><span class="setting-label-line"><label for="auto_inspect_{{ value }}">{{ label }}</label>{{ info_tip("Queues dovi_convert inspect once for each new file fingerprint. Inspection is full frame-by-frame analysis, can take significant time, and never authorizes conversion unless the separate MEL inspection gate is enabled.") }}</span><small>Run a full RPU inspection after successful classification.{% if value == "mel" %}<span class="setting-lock-note {% if not runtime.auto_convert_mel_after_inspect %}hidden{% endif %}" data-mel-inspection-lock-note> Required by the conversion inspection gate.</span>{% endif %}</small></div>
+                <label class="switch"><input id="auto_inspect_{{ value }}" type="checkbox" name="auto_inspect_{{ value }}" value="yes" {% if checked or (value == "mel" and runtime.auto_convert_mel_after_inspect) %}checked{% endif %} {% if value == "mel" and runtime.auto_convert_mel_after_inspect %}disabled{% endif %} {% if value == "mel" %}data-mel-inspection-toggle{% endif %}><span aria-hidden="true"></span><span class="sr-only">Automatically inspect {{ label }}</span></label>
+              </div>
+            {% endfor %}
+          </section>
+
+          <section class="panel settings-section">
+            <div class="settings-section-header">
+              <span class="settings-icon">{{ icon("clock") }}</span>
+              <div><h2>Scheduled discovery</h2><p>Periodic Smart Scans discover new or replaced MKVs and never overlap another scan.</p></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="schedule_enabled">Smart Scan schedule</label>{{ info_tip("Runs one global Smart Scan across every configured library root. The next interval begins after the previous scheduled scan finishes, and scans never overlap.") }}</span><small>Enabling it queues an initial Smart Scan.</small></div>
+              <label class="switch"><input id="schedule_enabled" type="checkbox" name="schedule_enabled" value="yes" {% if runtime.schedule_enabled %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable scheduled Smart Scans</span></label>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="schedule_interval_value">Scan interval</label>{{ info_tip("Controls how long the scheduler waits after a scheduled Smart Scan completes. Valid intervals range from 5 minutes through 52 weeks.") }}</span><small>Runs after the previous scheduled scan finishes.</small></div>
+              <div class="interval-control"><input id="schedule_interval_value" type="number" name="schedule_interval_value" min="1" max="524160" value="{{ runtime.schedule_interval_value }}" required><select name="schedule_interval_unit" aria-label="Schedule interval unit">{% for unit in ["minutes", "hours", "days", "weeks"] %}<option value="{{ unit }}" {% if runtime.schedule_interval_unit == unit %}selected{% endif %}>{{ unit|title }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="schedule_start_time">Start run at</label>{{ info_tip("Chooses the server-time hour and minute used for the first scheduled Smart Scan and for daily or weekly intervals. Minute and hourly intervals still run after the previous scheduled scan finishes.") }}</span><small>Server time. Daily and weekly schedules align to this time.</small></div>
+              <input id="schedule_start_time" class="time-input" type="time" name="schedule_start_time" value="{{ runtime.schedule_start_time }}" required>
+            </div>
+            {% if runtime.schedule_enabled %}
+              <div class="inline-status">{{ icon("clock") }} Next run: {% if next_schedule %}<time data-utc="{{ next_schedule.isoformat() }}">{{ next_schedule.isoformat() }}</time>{% else %}after active scan{% endif %}</div>
+            {% endif %}
+          </section>
+
+          <section class="panel settings-section">
+            <div class="settings-section-header">
+              <span class="settings-icon">{{ icon("activity") }}</span>
+              <div><h2>Inbound webhooks</h2><p>Radarr and Sonarr can request exact-file scans after import and scoped Smart Scans after rename.</p></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="webhooks_enabled">Webhook endpoints</label>{{ info_tip("Webhook URLs contain a secret token and bypass Basic Auth. They can request scans only, never conversions. Use HTTPS or a trusted private network.") }}</span><small>Protected independently by a generated URL token.</small></div>
+              <label class="switch"><input id="webhooks_enabled" type="checkbox" name="webhooks_enabled" value="yes" {% if runtime.webhooks_enabled %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable webhook endpoints</span></label>
+            </div>
+            <div class="mapping-editor">
+              <div class="section-heading compact"><div><span class="eyebrow">Path translation</span><h3>Radarr and Sonarr mappings {{ info_tip("Map the path prefix visible inside Radarr or Sonarr to the matching library mount in dovi-manager. When mappings overlap, the longest matching prefix wins.") }}</h3></div></div>
+              {% set rows = webhook_mappings if webhook_mappings else [{"integration":"radarr","external_prefix":runtime.radarr_root_prefix,"root_id":"default"}] %}
+              {% for mapping in rows %}
+                <div class="mapping-row">
+                  <select name="mapping_integration" aria-label="Integration"><option value="radarr" {% if mapping.integration == "radarr" %}selected{% endif %}>Radarr</option><option value="sonarr" {% if mapping.integration == "sonarr" %}selected{% endif %}>Sonarr</option></select>
+                  <input name="mapping_prefix" value="{{ mapping.external_prefix }}" placeholder="/movies or /tv" aria-label="External path prefix">
+                  <select name="mapping_root_id" aria-label="Target library">{% for root in media_roots %}<option value="{{ root.id }}" {% if mapping.root_id == root.id %}selected{% endif %}>{{ root.label }}</option>{% endfor %}</select>
+                </div>
+              {% endfor %}
+              <div class="mapping-row">
+                <select name="mapping_integration" aria-label="Additional integration"><option value="radarr">Radarr</option><option value="sonarr">Sonarr</option></select>
+                <input name="mapping_prefix" placeholder="Optional additional prefix" aria-label="Additional external path prefix">
+                <select name="mapping_root_id" aria-label="Additional target library">{% for root in media_roots %}<option value="{{ root.id }}">{{ root.label }}</option>{% endfor %}</select>
+              </div>
+            </div>
+            {% if runtime.webhooks_enabled and webhook_token %}
+              <div class="webhook-endpoints">
+                <label for="radarr-webhook-url">Radarr webhook URL</label>
+                <div class="copy-field"><input id="radarr-webhook-url" readonly value="{{ webhook_base_url }}/webhooks/radarr/{{ webhook_token }}"><button class="secondary" type="button" data-copy-value="#radarr-webhook-url">{{ icon("copy") }} Copy</button></div>
+                <label for="sonarr-webhook-url">Sonarr webhook URL</label>
+                <div class="copy-field"><input id="sonarr-webhook-url" readonly value="{{ webhook_base_url }}/webhooks/sonarr/{{ webhook_token }}"><button class="secondary" type="button" data-copy-value="#sonarr-webhook-url">{{ icon("copy") }} Copy</button></div>
+              </div>
+            {% endif %}
+          </section>
+
+          <section class="panel settings-section">
+            <div class="settings-section-header">
+              <span class="settings-icon">{{ icon("backups") }}</span>
+              <div><h2>Backup retention</h2><p>Backups younger than this threshold cannot be selected for deletion.</p></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="retention_days">Retention period</label>{{ info_tip("A backup cannot be selected for deletion until it reaches this age and its converted counterpart still exists. Deletion always requires a separate confirmation.") }}</span><small>Choose between 1 and 3650 days.</small></div>
+              <div class="number-suffix"><input id="retention_days" type="number" name="retention_days" min="1" max="3650" value="{{ runtime.retention_days }}" required><span>days</span></div>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="allow_backup_retention_override">Allow retention override</label>{{ info_tip("Lets you manually select backups that are younger than the retention period when their converted counterpart still exists. Orphaned backups remain protected. The deletion review shows an extra warning and still requires confirmation.") }}</span><small>Recent backups require an extra confirmation before deletion.</small></div>
+              <label class="switch"><input id="allow_backup_retention_override" type="checkbox" name="allow_backup_retention_override" value="yes" {% if runtime.allow_backup_retention_override %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Allow manual backup retention override</span></label>
+            </div>
+          </section>
+
+          <div class="settings-save sticky-settings-save"><button type="submit">{{ icon("check") }} Save operational settings</button></div>
+      </form>
+
+      {% if runtime.webhooks_enabled and webhook_token %}
+        <section class="panel settings-section token-danger-zone">
+          <div class="settings-section-header">
+            <span class="settings-icon">{{ icon("lock") }}</span>
+            <div><h2>Webhook credential</h2><p>Regeneration immediately invalidates both current webhook URLs.</p></div>
+          </div>
+          <form action="/settings/webhook-token/regenerate" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="danger" type="submit">{{ icon("lock") }} Regenerate webhook token</button>
+          </form>
+        </section>
+      {% endif %}
+
+      <section class="panel settings-section">
+        <div class="settings-section-header">
+          <span class="settings-icon">{{ icon("activity") }}</span>
+          <div><h2>Readiness matrix</h2><p>Every check must pass before conversion work can run safely.</p></div>
+        </div>
+        <div class="health-grid">
+          {% for name, ok in readiness_checks.items() %}
+            <div class="health-item {% if ok %}is-ready{% else %}is-failed{% endif %}">
+              <span>{{ icon("check" if ok else "x") }}</span>
+              <div><strong>{{ name|replace("_", " ")|title }}</strong><small>{{ "Ready" if ok else "Failed" }}</small></div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel settings-section">
+        <div class="settings-section-header">
+          <span class="settings-icon">{{ icon("database") }}</span>
+          <div><h2>Storage</h2><p>Capacity and writable paths used by media processing.</p></div>
+        </div>
+        <div class="storage-list">
+          {% for name, status in disk_status.items() %}
+            <div class="storage-item">
+              <div class="storage-heading"><span><strong>{{ name|title }}</strong><code>{{ status.path }}</code></span>{% if status.free is not none %}<span>{{ status.free|human_size }} free</span>{% else %}<span class="error-text">Unavailable</span>{% endif %}</div>
+              {% if status.used_percent is not none %}
+                <meter class="storage-bar" aria-label="{{ name }} storage used" min="0" max="100" value="{{ status.used_percent }}">{{ status.used_percent }}%</meter>
+                <small>{{ status.used_percent }}% used of {{ status.total|human_size }}</small>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <aside class="settings-sidebar">
+      <section class="panel settings-section">
+        <div class="section-heading compact"><div><span class="eyebrow">Runtime</span><h2>Application</h2></div></div>
+        <dl class="compact-details">
+          <dt>Version</dt><dd>{{ build_info.version }}</dd>
+          <dt>Git revision</dt><dd><code>{{ build_info.revision }}</code></dd>
+          <dt>Build date</dt><dd>{{ build_info.build_date }}</dd>
+          <dt>Database schema</dt><dd>{{ schema_version }}</dd>
+          <dt>dovi_convert</dt><dd>{{ dovi_version }}</dd>
+          <dt>Authentication</dt><dd><span class="status-text {% if auth_enabled %}is-positive{% else %}is-warning{% endif %}">{{ "Enabled" if auth_enabled else "Disabled" }}</span></dd>
+          <dt>Worker</dt><dd><span class="status-text {% if worker.running %}is-positive{% else %}is-warning{% endif %}">{{ "Running" if worker.running else "Stopped" }}</span></dd>
+        </dl>
+      </section>
+
+      <section class="panel settings-section">
+        <div class="section-heading compact"><div><span class="eyebrow">Dependencies</span><h2>Media tools</h2></div></div>
+        <div class="tool-list">
+          {% for name, path in tools.items() %}
+            <div><span class="status-orb {% if path %}is-ready{% else %}is-warning{% endif %}"></span><span><strong>{{ name }}</strong><small>{{ path or "Not found" }}</small></span></div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel settings-section">
+        <div class="section-heading compact"><div><span class="eyebrow">Limits</span><h2>Worker policy</h2></div></div>
+        <dl class="compact-details">
+          <dt>Scan depth</dt><dd>{{ runtime.scan_depth }}</dd>
+          <dt>Indexed MKVs</dt><dd>{{ inventory_count if inventory_count is defined else "-" }}</dd>
+          <dt>Stability window</dt><dd>{{ settings.stability_seconds }} seconds</dd>
+          <dt>Log limit</dt><dd>{{ settings.job_log_limit|human_size }}</dd>
+          <dt>Scan output limit</dt><dd>{{ settings.scan_output_limit_bytes|human_size }}</dd>
+          <dt>Disk reserve</dt><dd>{{ settings.disk_reserve_gib }} GiB</dd>
+        </dl>
+      </section>
+    </aside>
+  </div>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% from "macros/icons.html" import icon %}
+{% macro info_tip(text) -%}
+  <span class="info-tip">
+    <span class="info-tip-trigger" role="button" tabindex="0" aria-label="More information">{{ icon("info") }}</span>
+    <span class="info-tip-content" role="tooltip">{{ text }}</span>
+  </span>
+{%- endmacro %}

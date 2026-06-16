@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Choose an MKV - dovi-manager{% endblock %}
+{% block page_id %}file-browser{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/scans">Scan center</a>{{ icon("chevron-right") }}<span>Choose a file</span>
+  </nav>
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("folder") }} Live media browser</div>
+      <h1>Choose an MKV</h1>
+      <p>Browse validated library roots. Symbolic links and conversion backups are never shown.</p>
+    </div>
+  </section>
+
+  {% include "_file_browser_contents.html" %}
+{% endblock %}

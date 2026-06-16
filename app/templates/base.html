@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#070a12">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
+    <title>{% block title %}dovi-manager{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v={{ asset_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='operations.css') }}?v={{ asset_version }}">
+    <script src="{{ url_for('static', path='app.js') }}?v={{ asset_version }}" defer></script>
+    {% block head %}{% endblock %}
+  </head>
+  {% from "macros/icons.html" import icon, brand_mark %}
+  <body data-page="{% block page_id %}{% endblock %}">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="dovi-manager dashboard">
+          {{ brand_mark() }}
+          <span class="brand-copy">
+            <strong>dovi-manager</strong>
+            <span>Media operations</span>
+          </span>
+        </a>
+        <nav class="primary-nav" aria-label="Primary navigation">
+          <a {% if request.url.path == "/" %}class="active" aria-current="page"{% endif %} href="/">
+            {{ icon("dashboard") }}<span>Dashboard</span>
+          </a>
+          <a {% if request.url.path.startswith("/scans") %}class="active" aria-current="page"{% endif %} href="/scans">
+            {{ icon("scan") }}<span>Scan</span>
+          </a>
+          <a {% if request.url.path.startswith("/candidates") %}class="active" aria-current="page"{% endif %} href="/candidates">
+            {{ icon("candidates") }}<span>Candidates</span>
+          </a>
+          <a {% if request.url.path.startswith("/jobs") %}class="active" aria-current="page"{% endif %} href="/jobs">
+            {{ icon("jobs") }}<span>Jobs</span>
+          </a>
+          <a {% if request.url.path.startswith("/backups") %}class="active" aria-current="page"{% endif %} href="/backups">
+            {{ icon("backups") }}<span>Backups</span>
+          </a>
+          <a {% if request.url.path.startswith("/settings") %}class="active" aria-current="page"{% endif %} href="/settings">
+            {{ icon("settings") }}<span>Settings</span>
+          </a>
+        </nav>
+        <div class="sidebar-status">
+          <div class="system-state" data-system-state data-ready="{{ 'true' if shell_ready else 'false' }}">
+            <span class="status-orb {% if shell_ready %}is-ready{% else %}is-warning{% endif %}" data-system-orb></span>
+            <span>
+              <strong data-system-label>{% if shell_ready %}System ready{% else %}Needs attention{% endif %}</strong>
+              <small data-worker-label>Worker {{ "online" if worker.running else "offline" }}</small>
+            </span>
+          </div>
+          <a class="sidebar-status-link" href="/settings">
+            View system status {{ icon("chevron-right") }}
+          </a>
+          <span class="build-version">v{{ build_info.version }}</span>
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <header class="mobile-header">
+          <a class="brand brand-compact" href="/" aria-label="dovi-manager dashboard">
+            {{ brand_mark() }}<strong>dovi-manager</strong>
+          </a>
+          <a class="mobile-health" href="/settings" aria-label="{% if shell_ready %}System ready{% else %}System needs attention{% endif %}" data-mobile-health>
+            <span class="status-orb {% if shell_ready %}is-ready{% else %}is-warning{% endif %}" data-system-orb></span>
+          </a>
+        </header>
+        <main id="main-content" class="content-shell" tabindex="-1">
+          <div class="ambient-glow" aria-hidden="true"></div>
+          <div class="flash-stack" aria-live="polite">
+            {% if not auth_enabled %}
+              <div class="alert alert-warning" role="status">
+                <span class="alert-icon">{{ icon("lock") }}</span>
+                <div><strong>Authentication is disabled</strong><span>Restrict access to this service or configure Basic Auth.</span></div>
+              </div>
+            {% endif %}
+            {% if message %}
+              <div class="alert alert-success is-dismissible" role="status">
+                <span class="alert-icon">{{ icon("check") }}</span>
+                <div><strong>Action completed</strong><span>{{ message }}</span></div>
+                <button class="icon-button dismiss-alert" type="button" aria-label="Dismiss notification">{{ icon("x") }}</button>
+              </div>
+            {% endif %}
+            {% if error %}
+              <div class="alert alert-danger is-dismissible" role="alert">
+                <span class="alert-icon">{{ icon("alert") }}</span>
+                <div><strong>Action required</strong><span>{{ error }}</span></div>
+                <button class="icon-button dismiss-alert" type="button" aria-label="Dismiss notification">{{ icon("x") }}</button>
+              </div>
+            {% endif %}
+          </div>
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+
+      <nav class="mobile-dock" aria-label="Mobile navigation">
+        <a {% if request.url.path == "/" %}class="active" aria-current="page"{% endif %} href="/">{{ icon("dashboard") }}<span>Home</span></a>
+        <a {% if request.url.path.startswith("/scans") %}class="active" aria-current="page"{% endif %} href="/scans">{{ icon("scan") }}<span>Scan</span></a>
+        <a {% if request.url.path.startswith("/candidates") %}class="active" aria-current="page"{% endif %} href="/candidates">{{ icon("candidates") }}<span>Files</span></a>
+        <a {% if request.url.path.startswith("/jobs") %}class="active" aria-current="page"{% endif %} href="/jobs">{{ icon("jobs") }}<span>Jobs</span></a>
+        <a {% if request.url.path.startswith("/settings") %}class="active" aria-current="page"{% endif %} href="/settings">{{ icon("settings") }}<span>Settings</span></a>
+      </nav>
+    </div>
+  </body>
+</html>

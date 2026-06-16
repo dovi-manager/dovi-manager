@@ -1,0 +1,1 @@
+"""dovi-manager application package."""

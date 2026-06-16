@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Candidates - dovi-manager{% endblock %}
+{% block page_id %}candidates{% endblock %}
+{% block content %}
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("candidates") }} Candidate library</div>
+      <h1>Conversion candidates</h1>
+      <p>Review the latest scan results by Dolby Vision classification and choose only the conversions you trust.</p>
+    </div>
+    {% if counts.mel %}
+      <div class="actions">
+        <a class="button" href="/candidates/bulk-mel/confirm">{{ icon("bolt") }} Queue {{ counts.mel }} safe MEL</a>
+      </div>
+    {% endif %}
+  </section>
+
+  <nav class="category-tabs" aria-label="Candidate classifications">
+    <a class="{% if not selected_category %}active{% endif %}" href="/candidates{% if search %}?q={{ search|urlencode }}{% endif %}">
+      <span>All files</span><strong>{{ counts.mel + counts.simple_fel + counts.complex_fel + counts.scan_error }}</strong>
+    </a>
+    <a class="tab-safe {% if selected_category == 'mel' %}active{% endif %}" href="/candidates?category=mel{% if search %}&q={{ search|urlencode }}{% endif %}">
+      <span>Safe MEL</span><strong>{{ counts.mel }}</strong>
+    </a>
+    <a class="tab-review {% if selected_category == 'simple_fel' %}active{% endif %}" href="/candidates?category=simple_fel{% if search %}&q={{ search|urlencode }}{% endif %}">
+      <span>Simple FEL</span><strong>{{ counts.simple_fel }}</strong>
+    </a>
+    <a class="tab-blocked {% if selected_category == 'complex_fel' %}active{% endif %}" href="/candidates?category=complex_fel{% if search %}&q={{ search|urlencode }}{% endif %}">
+      <span>Complex FEL</span><strong>{{ counts.complex_fel }}</strong>
+    </a>
+    <a class="tab-error {% if selected_category == 'scan_error' %}active{% endif %}" href="/candidates?category=scan_error{% if search %}&q={{ search|urlencode }}{% endif %}">
+      <span>Scan errors</span><strong>{{ counts.scan_error }}</strong>
+    </a>
+  </nav>
+
+  <form method="get" class="toolbar">
+    {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+    <div class="search-control">
+      {{ icon("search") }}
+      <label class="sr-only" for="candidate-search">Search candidate paths</label>
+      <input id="candidate-search" type="search" name="q" value="{{ search }}" placeholder="Search movie or directory">
+    </div>
+    <button class="secondary" type="submit">{{ icon("filter") }} Apply search</button>
+    {% if search %}
+      <a class="button ghost" href="/candidates{% if selected_category %}?category={{ selected_category }}{% endif %}">Clear</a>
+    {% endif %}
+    <span class="toolbar-count">{{ total }} result(s)</span>
+  </form>
+
+  {% if candidates %}
+    <div class="table-wrap responsive-table">
+      <table>
+        <thead>
+          <tr><th>Media file</th><th>Classification</th><th>Scan result</th><th>Latest activity</th><th><span class="sr-only">Open</span></th></tr>
+        </thead>
+        <tbody>
+          {% for candidate in candidates %}
+            <tr>
+              <td data-label="Media file">
+                <a class="file-cell" href="/candidates/{{ candidate.id }}">
+                  <span class="file-icon">{{ icon("file") }}</span>
+                  <span>
+                    <strong>{{ candidate.relative_path|path_name }}</strong>
+                    <small>{{ candidate.relative_path|path_parent }}</small>
+                  </span>
+                </a>
+              </td>
+              <td data-label="Classification">
+                <span class="badge category-{{ candidate.category }}">{{ candidate.category|replace("_", " ") }}</span>
+              </td>
+              <td data-label="Scan result">
+                <span class="cell-primary">{{ candidate.status_text }}</span>
+                <small class="cell-secondary">{{ candidate.action_text }}</small>
+              </td>
+              <td data-label="Latest activity">
+                {% if candidate.latest_job_id %}
+                  <a class="job-reference" href="/jobs/{{ candidate.latest_job_id }}">
+                    <span>#{{ candidate.latest_job_id }}</span>
+                    <span class="badge state-{{ candidate.latest_job_state }}">{{ candidate.latest_job_state }}</span>
+                  </a>
+                {% else %}
+                  <span class="quiet-value">No jobs yet</span>
+                {% endif %}
+              </td>
+              <td class="row-open"><a href="/candidates/{{ candidate.id }}" aria-label="Open {{ candidate.relative_path }}">{{ icon("chevron-right") }}</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="pagination" aria-label="Candidate pages">
+      <span>Page {{ page }} of {{ page_count }}</span>
+      <div class="pagination-actions">
+        {% if page > 1 %}<a class="button secondary" href="?category={{ selected_category or '' }}&q={{ search|urlencode }}&page={{ page - 1 }}">{{ icon("arrow-left") }} Previous</a>{% endif %}
+        {% if page < page_count %}<a class="button secondary" href="?category={{ selected_category or '' }}&q={{ search|urlencode }}&page={{ page + 1 }}">Next {{ icon("chevron-right") }}</a>{% endif %}
+      </div>
+    </nav>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-content">
+        <span class="empty-state-icon">{{ icon("search") }}</span>
+        <h2>No candidates found</h2>
+        <p>{% if search %}No active candidates match "{{ search }}".{% else %}Run a library scan to discover Profile 7 media files.{% endif %}</p>
+        <div class="actions centered-actions">
+          {% if search %}
+            <a class="button secondary" href="/candidates{% if selected_category %}?category={{ selected_category }}{% endif %}">Clear search</a>
+          {% else %}<a class="button" href="/">{{ icon("scan") }} Go to command center</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

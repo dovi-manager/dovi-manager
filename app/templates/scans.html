@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Scan Center - dovi-manager{% endblock %}
+{% block page_id %}scans{% endblock %}
+{% block content %}
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("scan") }} Library discovery</div>
+      <h1>Scan center</h1>
+      <p>Choose the smallest scan that matches the work. Every mode is read-only and remains serialized through the single worker.</p>
+    </div>
+    <div class="scan-summary-chip">
+      <span>{{ icon("database") }}</span>
+      <strong>{{ inventory_count }}</strong>
+      <small>indexed MKV files</small>
+    </div>
+  </section>
+
+  <section class="scan-mode-grid" aria-label="Scan modes">
+    <article class="scan-mode-card scan-mode-primary">
+      <div class="scan-mode-heading">
+        <span class="scan-mode-icon">{{ icon("database") }}</span>
+        <span class="badge">Complete</span>
+      </div>
+      <div>
+        <span class="eyebrow">Full scan</span>
+        <h2>Rebuild the library snapshot</h2>
+        <p>Scans all MKV files in the selected library scope to depth {{ runtime.scan_depth }} and reconciles every candidate.</p>
+      </div>
+      <form action="/scans/full" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="sr-only" for="full-root">Full Scan library</label>
+        <select id="full-root" name="root_id"><option value="">All libraries</option>{% for root in media_roots %}<option value="{{ root.id }}">{{ root.label }}</option>{% endfor %}</select>
+        <button type="submit">{{ icon("scan") }} Run full scan</button>
+      </form>
+    </article>
+
+    <article class="scan-mode-card">
+      <div class="scan-mode-heading">
+        <span class="scan-mode-icon">{{ icon("bolt") }}</span>
+        <span class="badge category-mel">Efficient</span>
+      </div>
+      <div>
+        <span class="eyebrow">Smart scan</span>
+        <h2>Process only changed files</h2>
+        <p>Walks the configured library depth, compares fingerprints, and sends only new or changed MKVs to <code>dovi_convert</code>.</p>
+      </div>
+      <form action="/scans/smart" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="sr-only" for="smart-root">Smart Scan library</label>
+        <select id="smart-root" name="root_id"><option value="">All libraries</option>{% for root in media_roots %}<option value="{{ root.id }}">{{ root.label }}</option>{% endfor %}</select>
+        <button class="secondary" type="submit">{{ icon("bolt") }} Run smart scan</button>
+      </form>
+    </article>
+
+    <article class="scan-mode-card">
+      <div class="scan-mode-heading">
+        <span class="scan-mode-icon">{{ icon("folder") }}</span>
+        <span class="badge">Scoped</span>
+      </div>
+      <div>
+        <span class="eyebrow">Custom scan</span>
+        <h2>Target one library folder</h2>
+        <p>Paths are relative to the selected library. Leave the folder blank to target that library root with temporary options.</p>
+      </div>
+      <form class="scan-form" action="/scans/custom" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="custom-root">Library</label>
+        <select id="custom-root" name="root_id">{% for root in media_roots %}<option value="{{ root.id }}">{{ root.label }}</option>{% endfor %}</select>
+        <label for="custom-target">Relative folder</label>
+        <input id="custom-target" name="target" placeholder="Movie Collection/">
+        <div class="scan-option-row">
+          <label class="compact-toggle"><input type="checkbox" name="recursive" value="yes" checked data-recursive-toggle> Recursive</label>
+          <label for="custom-depth">Depth</label>
+          <input id="custom-depth" class="compact-number" type="number" name="depth" min="1" max="20" value="{{ runtime.scan_depth }}" required data-recursive-depth>
+          <label class="compact-toggle"><input type="checkbox" name="debug" value="yes" {% if runtime.scan_debug %}checked{% endif %}> Debug log</label>
+        </div>
+        <button class="secondary" type="submit">{{ icon("folder") }} Run custom scan</button>
+      </form>
+    </article>
+
+    <article class="scan-mode-card">
+      <div class="scan-mode-heading">
+        <span class="scan-mode-icon">{{ icon("file") }}</span>
+        <span class="badge category-simple_fel">Focused</span>
+      </div>
+      <div>
+        <span class="eyebrow">File scan</span>
+        <h2>Classify one MKV</h2>
+        <p>Runs the quick single-file classification. A full frame-by-frame inspection is offered from the result when applicable.</p>
+      </div>
+      <div class="scan-form">
+        <button class="secondary" type="button" data-file-browser-open data-browser-url="/scans/browse?fragment=1">{{ icon("folder") }} Browse and choose an MKV</button>
+        <noscript><a class="button secondary" href="/scans/browse">{{ icon("folder") }} Browse and choose an MKV</a></noscript>
+        <p class="field-help">The live browser includes unindexed files and excludes symlinks and conversion backups.</p>
+      </div>
+      <form class="scan-form file-scan-selection" action="/scans/file" method="post" data-file-scan-form>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="root_id" value="{{ selected_file_root.id if selected_file_root else '' }}" data-selected-root>
+        <input type="hidden" name="target" value="{{ selected_file_path }}" required data-selected-path>
+        <div class="selected-file {% if not selected_file_path %}is-empty{% endif %}" data-selected-file>
+          <span class="file-icon">{{ icon("file") }}</span>
+          <span>
+            <strong data-selected-file-name>{{ selected_file_path|path_name if selected_file_path else "No MKV selected" }}</strong>
+            <small data-selected-file-meta>{% if selected_file_path %}{{ selected_file_root.label }} &middot; {{ selected_file_path }}{% else %}Choose a file from a configured library.{% endif %}</small>
+          </span>
+        </div>
+        <label class="compact-toggle"><input type="checkbox" name="debug" value="yes" {% if runtime.scan_debug %}checked{% endif %}> Include debug logging</label>
+        <button type="submit" {% if not selected_file_path %}disabled{% endif %} data-file-scan-submit>{{ icon("file") }} Run file scan</button>
+      </form>
+    </article>
+  </section>
+
+  <dialog class="file-browser-dialog" data-file-browser-dialog aria-labelledby="file-browser-title">
+    <div class="dialog-shell">
+      <header class="dialog-header">
+        <div><span class="eyebrow">Live media browser</span><h2 id="file-browser-title">Choose an MKV</h2></div>
+        <button class="icon-button" type="button" aria-label="Close file browser" data-file-browser-close>{{ icon("x") }}</button>
+      </header>
+      <div class="dialog-body" data-file-browser-content>
+        <div class="browser-loading" role="status">{{ icon("activity") }} Loading library files...</div>
+      </div>
+    </div>
+  </dialog>
+
+  <section class="scan-operations-grid">
+    <article class="panel">
+      <div class="section-heading compact">
+        <div><span class="eyebrow">Automation</span><h2>Discovery status</h2></div>
+        <a href="/settings">Configure</a>
+      </div>
+      <dl class="detail-list">
+        <dt>Schedule</dt><dd><span class="status-text {% if runtime.schedule_enabled %}is-positive{% else %}is-warning{% endif %}">{{ "Enabled" if runtime.schedule_enabled else "Disabled" }}</span></dd>
+        <dt>Interval</dt><dd>{{ runtime.schedule_interval_label }}</dd>
+        <dt>Next run</dt><dd>{% if next_schedule %}<time data-utc="{{ next_schedule.isoformat() }}">{{ next_schedule.isoformat() }}</time>{% else %}Not scheduled{% endif %}</dd>
+        <dt>Pending triggers</dt><dd>{{ pending_requests }}</dd>
+        <dt>Webhooks</dt><dd>{{ "Enabled" if runtime.webhooks_enabled else "Disabled" }}</dd>
+      </dl>
+    </article>
+
+    <article class="panel">
+      <div class="section-heading compact">
+        <div><span class="eyebrow">History</span><h2>Recent scans</h2></div>
+        <a href="/jobs?kind=scan">All scans</a>
+      </div>
+      {% if recent_scans %}
+        <div class="compact-job-list">
+          {% for job in recent_scans %}
+            {% set metadata = job.payload_json|job_payload %}
+            <a href="/jobs/{{ job.id }}">
+              <span><strong>#{{ job.id }} {{ metadata.get("scan_mode", "full")|title }}</strong><small>{{ metadata.get("trigger", "manual")|title }} trigger</small></span>
+              <span class="badge state-{{ job.state }}">{{ job.state }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state compact-empty"><div class="empty-state-content"><span class="empty-state-icon">{{ icon("scan") }}</span><h2>No scans yet</h2><p>Choose a scan mode above to build the first inventory.</p></div></div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="panel inspection-history-panel">
+    <div class="section-heading compact">
+      <div><span class="eyebrow">Frame-by-frame analysis</span><h2>Recent full RPU inspections</h2></div>
+      <a href="/jobs?kind=inspect">All inspections</a>
+    </div>
+    {% if recent_inspections %}
+      <div class="compact-job-list">
+        {% for job in recent_inspections %}
+          <a href="/jobs/{{ job.id }}"><span><strong>#{{ job.id }} {{ job.candidate_path|path_name }}</strong><small>{{ job.candidate_root_label or "Library" }} &middot; full RPU inspection</small></span><span class="badge state-{{ job.state }}">{{ job.state }}</span></a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state compact-empty"><div class="empty-state-content"><span class="empty-state-icon">{{ icon("search") }}</span><h2>No full inspections yet</h2><p>Open a candidate and run full RPU inspection for frame-by-frame analysis.</p></div></div>
+    {% endif %}
+  </section>
+{% endblock %}

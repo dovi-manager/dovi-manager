@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Jobs - dovi-manager{% endblock %}
+{% block page_id %}jobs{% endblock %}
+{% block content %}
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("jobs") }} Worker queue</div>
+      <h1>Jobs and logs</h1>
+      <p>Track scans, inspections, conversions, and backup deletion jobs processed by the single worker.</p>
+    </div>
+    <span class="worker-chip"><span class="status-orb {% if worker.running %}is-ready{% else %}is-warning{% endif %}"></span> Worker {{ "online" if worker.running else "offline" }}</span>
+  </section>
+
+  <form method="get" class="toolbar jobs-toolbar">
+    <div class="search-control">
+      {{ icon("search") }}
+      <label class="sr-only" for="job-search">Search file or job ID</label>
+      <input id="job-search" type="search" name="q" value="{{ search }}" placeholder="Search file or #123">
+    </div>
+    <div class="select-control">
+      <label class="sr-only" for="job-state">Job state</label>
+      <select id="job-state" name="state">
+        <option value="">All states</option>
+        {% for state in job_states %}<option value="{{ state.value }}" {% if selected_state == state.value %}selected{% endif %}>{{ state.value|title }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="select-control">
+      <label class="sr-only" for="job-root">Library</label>
+      <select id="job-root" name="root_id"><option value="">All libraries</option>{% for root in media_roots %}<option value="{{ root.id }}" {% if selected_root == root.id %}selected{% endif %}>{{ root.label }}</option>{% endfor %}</select>
+    </div>
+    <div class="select-control">
+      <label class="sr-only" for="job-category">Candidate format</label>
+      <select id="job-category" name="category"><option value="">All formats</option>{% for category in candidate_categories %}<option value="{{ category.value }}" {% if selected_category == category.value %}selected{% endif %}>{{ category.value|replace("_", " ")|title }}</option>{% endfor %}</select>
+    </div>
+    <div class="select-control">
+      <label class="sr-only" for="job-origin">Queue origin</label>
+      <select id="job-origin" name="origin"><option value="">Manual and automatic</option><option value="manual" {% if selected_origin == "manual" %}selected{% endif %}>Manual</option><option value="automatic" {% if selected_origin == "automatic" %}selected{% endif %}>Automatic</option></select>
+    </div>
+    <div class="select-control">
+      <label class="sr-only" for="job-kind">Job kind</label>
+      <select id="job-kind" name="kind">
+        <option value="">All job types</option>
+        {% for kind in job_kinds %}<option value="{{ kind.value }}" {% if selected_kind == kind.value %}selected{% endif %}>{{ kind.value|replace("_", " ")|title }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="secondary" type="submit">{{ icon("filter") }} Filter</button>
+    {% if search or selected_state or selected_kind or selected_category or selected_root or selected_origin %}<a class="button ghost" href="/jobs">Clear</a>{% endif %}
+    <span class="toolbar-count">{{ total }} job(s)</span>
+  </form>
+
+  {% if jobs %}
+    <div class="table-wrap responsive-table jobs-table">
+      <table>
+        <thead><tr><th>Job</th><th>Type</th><th>State</th><th>Target</th><th>Created</th><th><span class="sr-only">Open</span></th></tr></thead>
+        <tbody>
+          {% for job in jobs %}
+            {% set metadata = job.payload_json|job_payload %}
+            <tr class="{% if job.state in ['queued', 'running'] %}active-job-row{% endif %}">
+              <td data-label="Job"><a class="job-id" href="/jobs/{{ job.id }}">#{{ job.id }}</a></td>
+              <td data-label="Type">
+                <span class="kind-cell"><i class="job-kind-icon job-kind-{{ job.kind }}">{{ icon("scan" if job.kind == "scan" else "file" if job.kind in ["convert", "inspect"] else "trash") }}</i>{% if job.kind == "scan" %}{{ metadata.get("scan_mode", "full")|title }} scan{% else %}{{ job.kind|replace("_", " ")|title }}{% endif %}</span>
+              </td>
+              <td data-label="State"><span class="badge state-{{ job.state }}">{{ job.state }}</span></td>
+              <td data-label="Target">
+                {% if job.candidate_path %}
+                  <span class="target-cell"><strong>{{ job.candidate_path|path_name }}</strong><small>{{ job.candidate_root_label or metadata.get("root_id", "Library") }} / {{ job.candidate_path|path_parent }}</small></span>
+                {% elif metadata.get("target") %}
+                  <span class="target-cell"><strong>{{ metadata.get("target")|path_name }}</strong><small>{{ metadata.get("target")|path_parent }}</small></span>
+                {% else %}<span class="quiet-value">Library operation</span>{% endif %}
+              </td>
+              <td data-label="Created"><time data-utc="{{ job.created_at }}">{{ job.created_at }}</time></td>
+              <td class="row-open"><a href="/jobs/{{ job.id }}" aria-label="Open job {{ job.id }}">{{ icon("chevron-right") }}</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="pagination" aria-label="Job pages">
+      <span>Page {{ page }} of {{ page_count }}</span>
+      <div class="pagination-actions">
+        {% if page > 1 %}<a class="button secondary" href="?state={{ selected_state or '' }}&kind={{ selected_kind or '' }}&category={{ selected_category or '' }}&root_id={{ selected_root or '' }}&origin={{ selected_origin or '' }}&q={{ search|urlencode }}&page={{ page - 1 }}">{{ icon("arrow-left") }} Previous</a>{% endif %}
+        {% if page < page_count %}<a class="button secondary" href="?state={{ selected_state or '' }}&kind={{ selected_kind or '' }}&category={{ selected_category or '' }}&root_id={{ selected_root or '' }}&origin={{ selected_origin or '' }}&q={{ search|urlencode }}&page={{ page + 1 }}">Next {{ icon("chevron-right") }}</a>{% endif %}
+      </div>
+    </nav>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-content">
+        <span class="empty-state-icon">{{ icon("jobs") }}</span>
+        <h2>No jobs found</h2>
+        <p>{% if search or selected_state or selected_kind or selected_category or selected_root or selected_origin %}No jobs match the selected filters.{% else %}Job history will appear after a scan or file action is queued.{% endif %}</p>
+        {% if search or selected_state or selected_kind or selected_category or selected_root or selected_origin %}<div class="actions centered-actions"><a class="button secondary" href="/jobs">Clear filters</a></div>{% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

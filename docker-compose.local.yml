@@ -1,0 +1,6 @@
+services:
+  dovi-manager:
+    image: dovi-manager:local
+    build:
+      context: .
+    pull_policy: build

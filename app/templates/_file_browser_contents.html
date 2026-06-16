@@ -1,0 +1,45 @@
+{% from "macros/icons.html" import icon %}
+<div class="file-browser-contents" data-file-browser-fragment>
+  <form action="/scans/browse" method="get" class="toolbar browser-toolbar" data-browser-form>
+    {% if fragment %}<input type="hidden" name="fragment" value="1">{% endif %}
+    <div class="select-control">
+      <label for="browser-root">Library</label>
+      <select id="browser-root" name="root_id" data-browser-root>
+        {% for root in media_roots %}<option value="{{ root.id }}" {% if root.id == selected_root.id %}selected{% endif %}>{{ root.label }}</option>{% endfor %}
+      </select>
+    </div>
+    <input type="hidden" name="path" value="{{ current_path }}">
+    <div class="search-control">{{ icon("search") }}<label class="sr-only" for="browser-search">Search below this folder</label><input id="browser-search" type="search" name="q" value="{{ search }}" placeholder="Search MKV filenames"></div>
+    <button class="secondary" type="submit">{{ icon("search") }} Search</button>
+    {% if search %}<a class="button ghost" data-browser-nav href="/scans/browse?root_id={{ selected_root.id }}&path={{ current_path|urlencode }}{% if fragment %}&fragment=1{% endif %}">Clear</a>{% endif %}
+  </form>
+
+  <section class="browser-panel">
+    <div class="section-heading compact">
+      <div><span class="eyebrow">{{ selected_root.label }}</span><h3><code>/{{ current_path }}</code></h3></div>
+      {% if parent_path is not none %}<a class="button secondary" data-browser-nav href="/scans/browse?root_id={{ selected_root.id }}&path={{ parent_path|urlencode }}{% if fragment %}&fragment=1{% endif %}">{{ icon("arrow-left") }} Parent folder</a>{% endif %}
+    </div>
+    {% if entries %}
+      <div class="browser-list">
+        {% for entry in entries %}
+          {% if entry.is_directory %}
+            <a data-browser-nav href="/scans/browse?root_id={{ selected_root.id }}&path={{ entry.relative_path|urlencode }}{% if fragment %}&fragment=1{% endif %}"><span class="file-icon">{{ icon("folder") }}</span><span><strong>{{ entry.name }}</strong><small>Folder</small></span>{{ icon("chevron-right") }}</a>
+          {% else %}
+            <a class="browser-file-choice" href="/scans?selected_root={{ selected_root.id|urlencode }}&selected_path={{ entry.relative_path|urlencode }}" data-file-choice data-root-id="{{ selected_root.id }}" data-root-label="{{ selected_root.label }}" data-relative-path="{{ entry.relative_path }}">
+              <span class="file-icon">{{ icon("file") }}</span><span><strong>{{ entry.name }}</strong><small>{{ entry.relative_path|path_parent }} &middot; {{ entry.size|human_size }}</small></span><span class="button secondary">Select</span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <nav class="pagination" aria-label="File pages">
+        <span>Page {{ page }} of {{ page_count }}{% if truncated %} &middot; first {{ result_limit }} matches{% endif %}</span>
+        <div class="pagination-actions">
+          {% if page > 1 %}<a class="button secondary" data-browser-nav href="/scans/browse?root_id={{ selected_root.id }}&path={{ current_path|urlencode }}&q={{ search|urlencode }}&page={{ page - 1 }}{% if fragment %}&fragment=1{% endif %}">Previous</a>{% endif %}
+          {% if page < page_count %}<a class="button secondary" data-browser-nav href="/scans/browse?root_id={{ selected_root.id }}&path={{ current_path|urlencode }}&q={{ search|urlencode }}&page={{ page + 1 }}{% if fragment %}&fragment=1{% endif %}">Next</a>{% endif %}
+        </div>
+      </nav>
+    {% else %}
+      <div class="empty-state compact-empty"><div class="empty-state-content"><span class="empty-state-icon">{{ icon("folder") }}</span><h3>No matching MKVs</h3><p>Choose another folder or adjust the search.</p></div></div>
+    {% endif %}
+  </section>
+</div>

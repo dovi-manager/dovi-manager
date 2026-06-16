@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}{{ candidate.relative_path|path_name }} - dovi-manager{% endblock %}
+{% block page_id %}candidate-detail{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/candidates">Candidates</a>{{ icon("chevron-right") }}<span>{{ candidate.relative_path|path_name }}</span>
+  </nav>
+  <section class="page-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("file") }} Candidate detail</div>
+      <h1>{{ candidate.relative_path|path_name }}</h1>
+      <p class="path-line">{{ candidate.root_label }} / {{ candidate.relative_path|path_parent }}</p>
+    </div>
+    <span class="badge category-{{ candidate.category }}">{{ candidate.category|replace("_", " ") }}</span>
+  </section>
+
+  <div class="detail-layout">
+    <section class="panel detail-primary">
+      <div class="section-heading compact">
+        <div><span class="eyebrow">Scan assessment</span><h2>Conversion profile</h2></div>
+      </div>
+      <div class="classification-hero classification-{{ candidate.category }}">
+        <span class="classification-icon">
+          {{ icon("shield" if candidate.category == "mel" else "alert" if candidate.category == "simple_fel" else "lock" if candidate.category == "complex_fel" else "terminal") }}
+        </span>
+        <div>
+          <small>Classification</small>
+          <strong>{{ candidate.category|replace("_", " ")|title }}</strong>
+          <p>
+            {% if candidate.category == "mel" %}Safe for the standard Profile 8.1 conversion path.
+            {% elif candidate.category == "simple_fel" %}Eligible only after explicit manual approval.
+            {% elif candidate.category == "complex_fel" %}Conversion is blocked. Inspection remains available.
+            {% else %}The scan could not classify this file successfully.{% endif %}
+          </p>
+        </div>
+      </div>
+      <dl class="detail-list">
+        <dt>Scan status</dt><dd>{{ candidate.status_text }}</dd>
+        <dt>Recommended action</dt><dd>{{ candidate.action_text }}</dd>
+        <dt>File size</dt><dd>{{ candidate.file_size|human_size }}</dd>
+        <dt>Last seen</dt><dd><time data-utc="{{ candidate.last_seen_at }}">{{ candidate.last_seen_at }}</time></dd>
+        <dt>Candidate state</dt><dd><span class="status-text {% if candidate.active %}is-positive{% endif %}">{{ "Active in latest scan" if candidate.active else "No longer active" }}</span></dd>
+      </dl>
+    </section>
+
+    <aside class="detail-sidebar">
+      <section class="panel">
+        <span class="eyebrow">Available actions</span>
+        <div class="stacked-actions">
+          <form action="/candidates/{{ candidate.id }}/inspect" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="secondary" type="submit">{{ icon("search") }} Run full RPU inspection</button>
+          </form>
+          {% if candidate.active and candidate.category in ["mel", "simple_fel"] %}
+            <a class="button" href="/candidates/{{ candidate.id }}/convert">{{ icon("bolt") }} Review conversion</a>
+          {% endif %}
+        </div>
+      </section>
+      <section class="safety-card">
+        <span>{{ icon("shield") }}</span>
+        <div>
+          <strong>Original protected</strong>
+          <p>Conversions preserve the source as a <code>.bak.dovi_convert</code> backup.</p>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  {% if candidate.category == "complex_fel" %}
+    <div class="alert alert-danger">
+      <span class="alert-icon">{{ icon("lock") }}</span>
+      <div><strong>Complex FEL conversion is blocked</strong><span>dovi-manager will never queue this file for automatic or manually approved conversion.</span></div>
+    </div>
+  {% endif %}
+
+  <section class="panel inspection-history-panel">
+    <div class="section-heading compact"><div><span class="eyebrow">Frame-by-frame analysis</span><h2>Full RPU inspection history</h2></div></div>
+    {% if inspection_history %}
+      <div class="compact-job-list">{% for job in inspection_history %}<a href="/jobs/{{ job.id }}"><span><strong>Inspection #{{ job.id }}</strong><small>{{ (job.payload_json|job_payload).get("trigger", "manual")|title }} trigger · <time data-utc="{{ job.created_at }}">{{ job.created_at }}</time></small></span><span class="badge state-{{ job.state }}">{{ job.state }}</span></a>{% endfor %}</div>
+    {% else %}
+      <p class="quiet-value">No full frame-by-frame inspection has been run for this candidate.</p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Job #{{ job.id }} - dovi-manager{% endblock %}
+{% block page_id %}job-detail{% endblock %}
+{% block content %}
+  <div id="job-detail" data-job-id="{{ job.id }}" data-active="{{ 'true' if job.state in ['queued', 'running'] else 'false' }}">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/jobs">Jobs</a>{{ icon("chevron-right") }}<span>Job #{{ job.id }}</span>
+    </nav>
+    <section class="page-header">
+      <div class="page-header-copy">
+        <div class="eyebrow">{{ icon("terminal") }} {% if job.kind == "scan" %}{{ payload.get("scan_mode", "full") }} scan{% else %}{{ job.kind|replace("_", " ") }} operation{% endif %}</div>
+        <h1>Job #{{ job.id }}</h1>
+        <p>{% if job.candidate_path %}{{ job.candidate_path }}{% elif payload.get("target") %}{{ payload.get("target") }}{% else %}Library-level background operation{% endif %}</p>
+      </div>
+      <span id="job-state" class="badge state-{{ job.state }}">{{ job.state }}</span>
+    </section>
+
+    <section class="job-state-panel state-panel-{{ job.state }}">
+      <div class="state-progress {% if job.state == 'running' %}is-running{% endif %}" aria-hidden="true"><span></span></div>
+      <div class="state-timeline" aria-label="Job lifecycle">
+        <div class="timeline-step {% if job.state != 'cancelled' or job.started_at %}is-complete{% elif job.state == 'queued' %}is-current{% endif %}" data-step="queued">
+          <i>{{ icon("check") }}</i><span><strong>Queued</strong><small><time data-utc="{{ job.created_at }}">{{ job.created_at }}</time></small></span>
+        </div>
+        <span class="timeline-line {% if job.started_at %}is-complete{% endif %}" data-line="running"></span>
+        <div class="timeline-step {% if job.state == 'running' %}is-current{% elif job.started_at %}is-complete{% endif %}" data-step="running">
+          <i>{{ icon("activity") }}</i><span><strong>Processing</strong><small id="job-started" data-empty="Waiting for worker">{% if job.started_at %}<time data-utc="{{ job.started_at }}">{{ job.started_at }}</time>{% else %}Waiting for worker{% endif %}</small></span>
+        </div>
+        <span class="timeline-line {% if job.finished_at %}is-complete{% endif %}" data-line="finished"></span>
+        <div class="timeline-step {% if job.finished_at %}is-complete terminal-{{ job.state }}{% endif %}" data-step="finished">
+          <i>{{ icon("check" if job.state == "succeeded" else "x" if job.state in ["failed", "cancelled"] else "clock") }}</i>
+          <span><strong data-finished-label>{% if job.state == "succeeded" %}Completed{% elif job.state == "failed" %}Failed{% elif job.state == "cancelled" %}Cancelled{% else %}Finish{% endif %}</strong><small id="job-finished" data-empty="Pending">{% if job.finished_at %}<time data-utc="{{ job.finished_at }}">{{ job.finished_at }}</time>{% else %}Pending{% endif %}</small></span>
+        </div>
+      </div>
+    </section>
+
+    <div class="job-detail-grid">
+      <section class="panel">
+        <div class="section-heading compact"><div><span class="eyebrow">Execution</span><h2>Job metadata</h2></div></div>
+        <dl class="detail-list">
+          <dt>Operation</dt><dd>{{ job.kind|replace("_", " ")|title }}</dd>
+          <dt>Library</dt><dd>{{ job.candidate_root_label or payload.get("root_id") or ("All libraries" if payload.get("root_ids") else "Not applicable") }}</dd>
+          {% if job.kind == "scan" %}
+            <dt>Scan mode</dt><dd>{{ payload.get("scan_mode", "full")|title }}</dd>
+            <dt>Trigger</dt><dd>{{ payload.get("trigger", "manual")|title }}</dd>
+            <dt>Scope</dt><dd><code>{{ payload.get("target") or "MEDIA_ROOT" }}</code></dd>
+            <dt>Recursion</dt><dd>{{ "Depth " ~ payload.get("depth", settings.scan_depth) if payload.get("recursive", true) else "Current folder only" }}</dd>
+            <dt>Debug</dt><dd>{{ "Enabled" if payload.get("debug") else "Disabled" }}</dd>
+          {% endif %}
+          <dt>Candidate</dt><dd>{% if job.candidate_path %}<code>{{ job.candidate_path }}</code>{% else %}Not applicable{% endif %}</dd>
+          {% if job.kind in ["convert", "inspect"] %}
+            <dt>Format</dt><dd>{{ (payload.get("candidate_category") or job.candidate_category or "Unknown")|replace("_", " ")|title }}</dd>
+            <dt>Trigger</dt><dd>{{ payload.get("queue_origin", payload.get("trigger", "manual"))|title }}</dd>
+          {% endif %}
+          <dt>Exit code</dt><dd id="job-exit-code">{{ job.exit_code if job.exit_code is not none else "-" }}</dd>
+          <dt>Approved by</dt><dd>{{ job.approved_by or "Not required" }}</dd>
+          <dt>Error</dt><dd id="job-error" class="{% if job.error %}error-text{% endif %}">{{ job.error or "-" }}</dd>
+        </dl>
+      </section>
+      <section class="panel command-panel">
+        <div class="section-heading compact"><div><span class="eyebrow">Command</span><h2>Worker invocation</h2></div></div>
+        {% if command %}
+          <div class="command-line"><span>$</span><code>{{ command|join(" ") }}</code></div>
+        {% else %}
+          <div class="command-pending">{{ icon("clock") }} Command is prepared when the worker starts this job.</div>
+        {% endif %}
+        {% if job.state == "queued" %}
+          <form class="cancel-job" action="/jobs/{{ job.id }}/cancel" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="danger" type="submit">{{ icon("x") }} Cancel queued job</button>
+          </form>
+        {% endif %}
+      </section>
+    </div>
+
+    {% if scan_candidate and scan_candidate.active %}
+      <section class="scan-result-banner">
+        <span class="scan-mode-icon">{{ icon("file") }}</span>
+        <div><span class="eyebrow">File scan result</span><strong>{{ scan_candidate.category|replace("_", " ")|title }}</strong><small>{{ scan_candidate.status_text }}</small></div>
+        <a class="button secondary" href="/candidates/{{ scan_candidate.id }}">Review and inspect {{ icon("chevron-right") }}</a>
+      </section>
+    {% endif %}
+
+    <section class="log-panel">
+      <div class="log-toolbar">
+        <div><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><strong>Job output</strong></div>
+        <div>
+          <button class="icon-button log-follow" type="button" data-log-follow aria-pressed="true" title="Follow output">{{ icon("pause") }}<span class="sr-only">Pause following output</span></button>
+          <button class="icon-button" type="button" data-copy-log title="Copy log">{{ icon("copy") }}<span class="sr-only">Copy job log</span></button>
+        </div>
+      </div>
+      <div id="job-log-truncated" class="log-notice{% if not job.log_truncated %} hidden{% endif %}">{{ icon("alert") }} The beginning of this log was truncated at the configured limit.</div>
+      <pre id="job-log" class="log" tabindex="0">{{ job.log_text or "No output yet." }}</pre>
+    </section>
+  </div>
+{% endblock %}

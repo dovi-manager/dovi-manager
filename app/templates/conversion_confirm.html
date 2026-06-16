@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Confirm conversion - dovi-manager{% endblock %}
+{% block page_id %}conversion-confirm{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/candidates">Candidates</a>{{ icon("chevron-right") }}
+    <a href="/candidates/{{ candidate.id }}">{{ candidate.relative_path|path_name }}</a>{{ icon("chevron-right") }}
+    <span>Review conversion</span>
+  </nav>
+  <section class="page-header focused-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("shield") }} Safety review</div>
+      <h1>Confirm conversion</h1>
+      <p>Review the file, classification, and storage preflight before adding this job to the queue.</p>
+    </div>
+  </section>
+
+  <div class="confirmation-layout">
+    <section class="panel confirmation-main">
+      <div class="confirmation-file">
+        <span class="file-icon large">{{ icon("file") }}</span>
+        <div>
+          <strong>{{ candidate.relative_path|path_name }}</strong>
+          <span>{{ candidate.relative_path|path_parent }}</span>
+        </div>
+        <span class="badge category-{{ candidate.category }}">{{ candidate.category|replace("_", " ") }}</span>
+      </div>
+
+      <div class="review-grid">
+        <div><small>File size</small><strong>{{ candidate.file_size|human_size }}</strong></div>
+        {% if storage_requirement and storage_requirement.combined %}
+          <div><small>Shared storage needed</small><strong>{{ storage_requirement.media_required|human_size }}</strong></div>
+        {% elif storage_requirement %}
+          <div><small>Media space needed</small><strong>{{ storage_requirement.media_required|human_size }}</strong></div>
+          <div><small>Temporary space needed</small><strong>{{ storage_requirement.temp_required|human_size }}</strong></div>
+        {% endif %}
+      </div>
+
+      <div class="process-flow" aria-label="Conversion safety flow">
+        <span><i>{{ icon("file") }}</i><strong>Source MKV</strong><small>Profile 7</small></span>
+        {{ icon("chevron-right") }}
+        <span><i>{{ icon("bolt") }}</i><strong>Convert</strong><small>Serialized job</small></span>
+        {{ icon("chevron-right") }}
+        <span><i>{{ icon("shield") }}</i><strong>Profile 8.1</strong><small>Backup retained</small></span>
+      </div>
+
+      {% if preflight_error %}
+        <div class="alert alert-danger">
+          <span class="alert-icon">{{ icon("alert") }}</span>
+          <div><strong>Storage preflight failed</strong><span>{{ preflight_error }}</span></div>
+        </div>
+      {% else %}
+        <div class="alert alert-success">
+          <span class="alert-icon">{{ icon("check") }}</span>
+          <div><strong>Preflight passed</strong><span>Required directories are writable and the configured disk reserve is protected.</span></div>
+        </div>
+      {% endif %}
+
+      {% if candidate.category == "simple_fel" %}
+        <div class="alert alert-warning">
+          <span class="alert-icon">{{ icon("alert") }}</span>
+          <div><strong>Simple FEL requires judgment</strong><span>Simple FEL is likely safe based on sampled analysis, but it is not guaranteed. Manual approval is required.</span></div>
+        </div>
+      {% endif %}
+    </section>
+
+    <aside class="panel approval-panel">
+      <span class="eyebrow">Approval</span>
+      <h2>Ready to queue?</h2>
+      <p>This operation modifies the media file. It never uses <code>--force</code> or <code>--delete</code>, and it preserves the original backup.</p>
+      <form action="/candidates/{{ candidate.id }}/convert" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="approval-check">
+          <input type="checkbox" name="approved" value="yes" required>
+          <span><strong>I reviewed this file</strong><small>I approve this conversion and understand that the media file will be modified.</small></span>
+        </label>
+        <div class="stacked-actions">
+          <button type="submit" {% if preflight_error %}disabled title="Resolve the preflight error first"{% endif %}>{{ icon("bolt") }} Queue conversion</button>
+          <a class="button secondary" href="/candidates/{{ candidate.id }}">Cancel</a>
+        </div>
+      </form>
+    </aside>
+  </div>
+{% endblock %}

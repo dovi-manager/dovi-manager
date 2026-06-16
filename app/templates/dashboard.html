@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block page_id %}dashboard{% endblock %}
+{% block content %}
+  <section class="page-header dashboard-header">
+    <div class="page-header-copy">
+      <div class="eyebrow">{{ icon("activity") }} Media operations</div>
+      <h1>Command center</h1>
+      <p>Scan your library, review Dolby Vision candidates, and monitor conversion activity from one place.</p>
+    </div>
+    <div class="actions">
+      <form action="/scans/smart" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">{{ icon("bolt") }} Run smart scan</button>
+      </form>
+      <a class="button secondary" href="/scans">Choose scan mode</a>
+    </div>
+  </section>
+
+  {% if not readiness_ok %}
+    <div class="readiness-banner" data-readiness-banner>
+      <span class="readiness-icon">{{ icon("alert") }}</span>
+      <div>
+        <strong>Conversion services need attention</strong>
+        <p>
+          {{ readiness_checks.values()|select("equalto", false)|list|length }}
+          readiness check(s) failed. Conversion jobs remain protected until the environment is ready.
+        </p>
+      </div>
+      <a class="button secondary" href="/settings">Review checks</a>
+    </div>
+  {% endif %}
+
+  <section class="dashboard-overview" aria-label="Operational overview">
+    <article class="hero-card">
+      <div class="hero-card-glow" aria-hidden="true"></div>
+      <div class="hero-card-topline">
+        <span class="hero-icon">{{ icon("scan") }}</span>
+        <span class="live-label">
+          <span class="status-orb {% if worker.running %}is-ready{% else %}is-warning{% endif %}"></span>
+          Worker {{ "online" if worker.running else "offline" }}
+        </span>
+      </div>
+      <div class="hero-card-copy">
+        <span class="eyebrow">Library scan</span>
+        {% if last_scan %}
+          <h2>Last scan <a href="/jobs/{{ last_scan.id }}">#{{ last_scan.id }}</a></h2>
+          <p>
+            <span data-last-scan-state class="badge state-{{ last_scan.state }}">{{ last_scan.state }}</span>
+            <span>started <time data-last-scan-time data-utc="{{ last_scan.created_at }}">{{ last_scan.created_at }}</time></span>
+          </p>
+        {% else %}
+          <h2>Your library is ready to scan</h2>
+          <p>No scan has been recorded yet. Start with a read-only candidate scan.</p>
+        {% endif %}
+      </div>
+      <div class="hero-card-footer">
+        <span>{{ icon("shield") }} Scans do not modify media</span>
+        <span>{{ icon("clock") }} One job at a time</span>
+      </div>
+    </article>
+
+    <article class="activity-card">
+      <div class="section-heading compact">
+        <div>
+          <span class="eyebrow">Queue pulse</span>
+          <h2>Job activity</h2>
+        </div>
+        <a href="/jobs">View all</a>
+      </div>
+      <div class="activity-gauge" aria-label="{{ job_counts.running }} running and {{ job_counts.queued }} queued jobs">
+        <div class="gauge-value">
+          <strong data-summary="jobs-active">{{ job_counts.running + job_counts.queued }}</strong>
+          <span>active</span>
+        </div>
+        <div class="gauge-rings" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="activity-split">
+        <a href="/jobs?state=running"><span>Running</span><strong data-summary="jobs-running">{{ job_counts.running }}</strong></a>
+        <a href="/jobs?state=queued"><span>Queued</span><strong data-summary="jobs-queued">{{ job_counts.queued }}</strong></a>
+        <a href="/jobs?state=failed"><span>Failed</span><strong data-summary="jobs-failed">{{ job_counts.failed }}</strong></a>
+      </div>
+    </article>
+  </section>
+
+  <section>
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow">Candidate pipeline</span>
+        <h2>Dolby Vision classifications</h2>
+      </div>
+      <a href="/candidates">Open candidate library {{ icon("chevron-right") }}</a>
+    </div>
+    <div class="metric-grid candidate-metrics">
+      <a class="metric-card metric-safe" href="/candidates?category=mel">
+        <span class="metric-icon">{{ icon("shield") }}</span>
+        <span class="metric-copy"><small>Safe MEL</small><strong data-summary="candidates-mel">{{ candidate_counts.mel }}</strong><span>Ready for standard conversion</span></span>
+        {{ icon("chevron-right", "metric-arrow") }}
+      </a>
+      <a class="metric-card metric-review" href="/candidates?category=simple_fel">
+        <span class="metric-icon">{{ icon("alert") }}</span>
+        <span class="metric-copy"><small>Simple FEL</small><strong data-summary="candidates-simple_fel">{{ candidate_counts.simple_fel }}</strong><span>Manual approval required</span></span>
+        {{ icon("chevron-right", "metric-arrow") }}
+      </a>
+      <a class="metric-card metric-blocked" href="/candidates?category=complex_fel">
+        <span class="metric-icon">{{ icon("lock") }}</span>
+        <span class="metric-copy"><small>Complex FEL</small><strong data-summary="candidates-complex_fel">{{ candidate_counts.complex_fel }}</strong><span>Conversion always blocked</span></span>
+        {{ icon("chevron-right", "metric-arrow") }}
+      </a>
+      <a class="metric-card metric-error" href="/candidates?category=scan_error">
+        <span class="metric-icon">{{ icon("terminal") }}</span>
+        <span class="metric-copy"><small>Scan errors</small><strong data-summary="candidates-scan_error">{{ candidate_counts.scan_error }}</strong><span>Needs inspection</span></span>
+        {{ icon("chevron-right", "metric-arrow") }}
+      </a>
+    </div>
+  </section>
+
+  <section class="dashboard-lower-grid">
+    <div>
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Conversion history</span>
+          <h2>Recent conversions</h2>
+        </div>
+        <a href="/jobs?kind=convert">View all conversions</a>
+      </div>
+      {% if recent_conversions %}
+        <div class="activity-list">
+          {% for job in recent_conversions %}
+            {% set metadata = job.payload_json|job_payload %}
+            {% set candidate_path = job.candidate_path or metadata.get("relative_path", "Unknown file") %}
+            {% set category = metadata.get("candidate_category") or job.candidate_category or "mel" %}
+            {% set origin = metadata.get("queue_origin", "automatic" if job.approved_by == "local:auto" else "manual") %}
+            <a class="activity-row conversion-row" href="/jobs/{{ job.id }}">
+              <span class="job-kind-icon job-kind-convert">{{ icon("file") }}</span>
+              <span class="activity-row-main">
+                <strong>{{ candidate_path|path_name }}</strong>
+                <span>{{ job.candidate_root_label or metadata.get("root_id", "Library") }} &middot; {{ candidate_path }}</span>
+              </span>
+              <span class="activity-labels">
+                <span class="badge category-{{ category }}">{{ "Simple FEL" if category == "simple_fel" else "MEL" }}</span>
+                <span class="badge origin-{{ origin }}">{{ origin|title }}</span>
+              </span>
+              <span class="badge state-{{ job.state }}">{{ job.state }}</span>
+              <time data-utc="{{ job.created_at }}">{{ job.created_at }}</time>
+              {{ icon("chevron-right", "row-arrow") }}
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state compact-empty">
+          <div class="empty-state-content">
+            <span class="empty-state-icon">{{ icon("activity") }}</span>
+            <h2>No conversions yet</h2>
+            <p>Successful and failed conversion jobs will appear here.</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Storage safety</span>
+          <h2>Protected originals</h2>
+        </div>
+        <a href="/backups">Manage</a>
+      </div>
+      <a class="backup-summary-card" href="/backups">
+        <span class="backup-visual">{{ icon("backups") }}<i></i></span>
+        <span>
+          <strong data-summary="backups-count">{{ backup_count }}</strong>
+          <small>backup file(s)</small>
+        </span>
+        <span>
+          <strong data-summary="backups-size">{{ backup_size|human_size }}</strong>
+          <small>protected storage</small>
+        </span>
+        {{ icon("chevron-right") }}
+      </a>
+
+      {% if recent_failures %}
+        <div class="failure-summary">
+          <div class="failure-summary-title">
+            <span>{{ icon("alert") }} Recent failures</span>
+            <strong>{{ recent_failures|length }}</strong>
+          </div>
+          {% for job in recent_failures[:3] %}
+            <a href="/jobs/{{ job.id }}">
+              <span>#{{ job.id }} {{ job.kind|replace("_", " ") }}</span>
+              <small>{{ job.error or "See job log" }}</small>
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,50 @@
+services:
+  dovi-manager:
+    image: "${DOVI_MANAGER_IMAGE:-ghcr.io/dovi-manager/dovi-manager:edge}"
+    pull_policy: always
+    container_name: dovi-manager
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-UTC}"
+      MEDIA_ROOT: /media2/movies
+      MEDIA_ROOT_LABEL: "${MEDIA_ROOT_LABEL:-Movies}"
+      ADDITIONAL_MEDIA_ROOTS_JSON: '${ADDITIONAL_MEDIA_ROOTS_JSON:-[]}'
+      TEMP_DIR: /cache
+      CONFIG_DIR: /config
+      DB_PATH: /config/dovi-manager.db
+      SCAN_DEPTH: "${SCAN_DEPTH:-5}"
+      STABILITY_SECONDS: "${STABILITY_SECONDS:-30}"
+      RETENTION_DAYS: "${RETENTION_DAYS:-30}"
+      JOB_LOG_LIMIT: "${JOB_LOG_LIMIT:-1000000}"
+      SCAN_OUTPUT_LIMIT_BYTES: "${SCAN_OUTPUT_LIMIT_BYTES:-20971520}"
+      DISK_RESERVE_GIB: "${DISK_RESERVE_GIB:-2}"
+      SHUTDOWN_GRACE_SECONDS: "${SHUTDOWN_GRACE_SECONDS:-20}"
+      AUTH_USERNAME: "${AUTH_USERNAME:-}"
+      AUTH_PASSWORD: "${AUTH_PASSWORD:-}"
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
+    volumes:
+      - "${MEDIA_PATH:-./dev-media}:/media2/movies"
+      - "${TV_MEDIA_PATH:-./dev-tv}:/media2/tv"
+      - "${CACHE_PATH:-./dev-cache}:/cache"
+      - "${CONFIG_PATH:-./config}:/config"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=1g,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    stop_grace_period: "${STOP_GRACE_PERIOD:-45s}"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - /opt/dovi-manager/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
