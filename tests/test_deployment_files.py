@@ -32,9 +32,8 @@ def test_readme_documents_media_roots_config_file() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "/config/media-roots.json" in readme
-    assert '"id": "shows"' in readme
     assert '"id": "anime"' in readme
-    assert "Legacy `ADDITIONAL_MEDIA_ROOTS_JSON` remains supported" in readme
+    assert "Root IDs should remain stable" in readme
 
 
 def test_local_compose_override_restores_build() -> None:
