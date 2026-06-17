@@ -449,21 +449,35 @@ function setupFileBrowser() {
 }
 
 function setupCopyFields() {
+  const copyInputValue = async (input) => {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(input.value);
+        return true;
+      } catch {
+        // Fall back for browsers that expose Clipboard API but deny this page.
+      }
+    }
+
+    input.focus();
+    input.select();
+    input.setSelectionRange?.(0, input.value.length);
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    }
+  };
+
   document.querySelectorAll("[data-copy-value]").forEach((button) => {
     button.addEventListener("click", async () => {
       const input = document.querySelector(button.dataset.copyValue);
       if (!input) return;
-      try {
-        await navigator.clipboard.writeText(input.value);
-        const original = button.innerHTML;
-        button.textContent = "Copied";
-        window.setTimeout(() => {
-          button.innerHTML = original;
-        }, 1600);
-      } catch {
-        input.focus();
-        input.select();
-      }
+      const original = button.innerHTML;
+      button.textContent = (await copyInputValue(input)) ? "Copied" : "Selected";
+      window.setTimeout(() => {
+        button.innerHTML = original;
+      }, 1600);
     });
   });
 }
