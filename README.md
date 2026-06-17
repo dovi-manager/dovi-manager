@@ -1,56 +1,59 @@
 # dovi-manager
 
 `dovi-manager` is a Dockerized, server-rendered web UI for
-[`dovi_convert`](https://github.com/cryptochrome/dovi_convert). It scans a
-movie library for Dolby Vision Profile 7 MKV files and serializes conversions
+[`dovi_convert`](https://github.com/cryptochrome/dovi_convert). It scans media
+libraries for Dolby Vision Profile 7 MKV files and serializes safe conversions
 to Profile 8.1.
 
-The application does not reimplement conversion logic. The container is pinned
-to `cryptochrome/dovi_convert:8.2.0` and invokes that CLI directly.
+The app wraps the existing CLI. It does not reimplement Dolby Vision conversion
+logic.
 
-## Safety model
+## What The Image Includes
+
+No separate `cryptochrome/dovi_convert` container is required.
+
+The published `ghcr.io/dovi-manager/dovi-manager` image is built from the
+pinned upstream base image `cryptochrome/dovi_convert:8.2.0` and invokes the
+bundled `dovi_convert` binary directly. Docker only pulls
+`cryptochrome/dovi_convert:8.2.0` when you build dovi-manager locally. Normal
+installs pull one dovi-manager image.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream source and
+license information.
+
+## Safety Model
 
 - Safe MEL files can be manually queued or optionally auto-queued.
 - Simple FEL files always require explicit manual approval.
 - Complex FEL files can be inspected but cannot be converted.
 - `--force` and `--delete` are never passed to `dovi_convert`.
 - Every conversion preserves the original as `.mkv.bak.dovi_convert`.
-- Files must resolve beneath a configured library root, remain unchanged since scanning,
-  and remain stable for the configured window before conversion.
-- Conversion starts only after write-permission and conservative free-space
-  checks pass for both media and temporary storage.
-- A successful CLI exit is accepted only when the converted MKV and a
-  full-size original backup both exist.
-- Backup deletion requires a separate review page and confirmation.
-- Every mutation uses an actor-bound CSRF token backed by a secret persisted
-  in `/config/csrf-secret`.
+- Files must resolve beneath a configured media root.
+- Files must remain unchanged since scanning and stable before conversion.
+- Conversion starts only after write-permission and conservative free-space checks.
+- Backup deletion requires a review page and confirmation.
+- Every mutation uses CSRF protection.
 - Only one background job runs at a time.
 
-## Pages
-
-- Dashboard with candidate, job, backup, and worker status
-- Scan Center with Full, Smart, Custom, and File scan workflows
-- Candidates grouped as MEL, Simple FEL, Complex FEL, and scan errors
-- Jobs with command details, bounded logs, states, and queued cancellation
-- Backups with retention and orphan protection
-- Settings/status with storage, helper tools, authentication, and automation
-
-## Docker deployment
-
-The recommended deployment path is the published multi-architecture container
-image. Users do not need a Git checkout or a registry token for normal
-installation.
+## Docker Quick Start
 
 Copy `docker-compose.example.yml` and `.env.example` to the host that can read
-and write the media library. Set at least these environment values:
+and write the media library:
+
+```bash
+cp .env.example .env
+```
+
+Edit at least these values:
 
 ```dotenv
-DOVI_MANAGER_IMAGE=ghcr.io/dovi-manager/dovi-manager:edge
+DOVI_MANAGER_IMAGE=ghcr.io/dovi-manager/dovi-manager:latest
 PUID=1000
 PGID=1000
 TZ=UTC
 
 MEDIA_PATH=/srv/media/movies
+SHOWS_PATH=/srv/media/shows
 CACHE_PATH=/srv/dovi-manager/cache
 CONFIG_PATH=/srv/dovi-manager/config
 
@@ -58,38 +61,48 @@ AUTH_USERNAME=admin
 AUTH_PASSWORD=replace-with-a-long-unique-password
 ```
 
-The `edge` tag is published after every successful CI run on `main`. The image
-is available for both `linux/amd64` and `linux/arm64`.
-
-### Prepare host storage
-
-Use the UID and GID that own the media library:
-
-```bash
-id your-media-user
-```
-
-Create the writable cache and configuration directories:
+Create writable cache and config directories:
 
 ```bash
 mkdir -p /srv/dovi-manager/cache /srv/dovi-manager/config
 chown 1000:1000 /srv/dovi-manager/cache /srv/dovi-manager/config
 ```
 
-The configured user also needs read/write/rename permission throughout the
-movie library. Conversion replaces the source path and creates a sibling
+The configured `PUID:PGID` also needs read, write, and rename permission in the
+media libraries. Conversion replaces the source path and creates a sibling
 backup, so read-only media mounts cannot work.
 
-### Start and update
-
-Start the service with Docker Compose:
+Start the service:
 
 ```bash
 docker compose --env-file .env -f docker-compose.example.yml up -d
 ```
 
-After a successful `main` build, pull the current image and recreate the
-container:
+Open `http://SERVER_IP:8000/`, then check `/readyz` before scanning a full
+library.
+
+The Compose stack has no Docker socket, uses `no-new-privileges`, runs under
+`PUID:PGID`, and mounts the container root filesystem read-only.
+
+## Docker Image Tags
+
+| Tag | Purpose |
+| --- | --- |
+| `latest` | Latest stable GitHub release. Recommended for normal installs. |
+| `0.1.0`, `0.1`, etc. | Versioned release tags. Use these when you want pinned upgrades. |
+| `edge` | Latest successful `main` build. Use for testing upcoming changes. |
+| `sha-<full-commit>` | Immutable build tag for rollback and debugging. |
+
+`stable` is not published. It would be another moving alias for the same stable
+release channel, so this project uses `latest` plus versioned tags instead.
+
+Release tags must use `vMAJOR.MINOR.PATCH`. A tag such as `v0.1.0` publishes
+`0.1.0`, `0.1`, and `latest`. Every successful `main` build publishes `edge`
+and `sha-<full-commit>`.
+
+## Updating And Rollback
+
+For stable installs, pull the current release image and recreate the container:
 
 ```bash
 docker compose --env-file .env -f docker-compose.example.yml pull
@@ -102,18 +115,38 @@ Verify the deployed revision:
 curl http://SERVER_IP:8000/versionz
 ```
 
-The returned `revision` must match the expected full Git commit. Refresh any
-open browser page after an update so its forms contain a CSRF token generated
-from the current persistent secret.
+To roll back, set `DOVI_MANAGER_IMAGE` in `.env` to an immutable
+`ghcr.io/dovi-manager/dovi-manager:sha-<full-commit>` tag, then pull and
+recreate the container. Set it back to `:latest` to resume the stable channel or
+`:edge` to follow main-branch builds.
 
-The Compose stack has no Docker socket, uses `no-new-privileges`, runs under
-`PUID:PGID`, and mounts the container root filesystem read-only.
+Before upgrading, back up the persistent configuration directory while the
+container is stopped:
+
+```bash
+docker stop dovi-manager
+tar -C /srv/dovi-manager -czf dovi-manager-config-backup.tgz config
+docker start dovi-manager
+```
+
+Schema migrations run transactionally at startup. A database created by a newer
+unsupported application version causes startup to fail instead of being
+downgraded.
+
+## Pages
+
+- Dashboard with candidate, job, backup, and worker status
+- Scan Center with Full, Smart, Custom, and File scan workflows
+- Candidates grouped as MEL, Simple FEL, Complex FEL, and scan errors
+- Jobs with command details, bounded logs, states, and queued cancellation
+- Backups with retention and orphan protection
+- Settings/status with storage, helper tools, authentication, webhooks, and automation
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DOVI_MANAGER_IMAGE` | `ghcr.io/dovi-manager/dovi-manager:edge` | Image tag or immutable rollback tag |
+| `DOVI_MANAGER_IMAGE` | `ghcr.io/dovi-manager/dovi-manager:latest` | Image tag or immutable rollback tag |
 | `MEDIA_ROOT` | `/media2/movies` | Container Movies library root |
 | `MEDIA_ROOT_LABEL` | `Movies` | Display label for the backward-compatible default root |
 | `SHOWS_ROOT` | `/media2/shows` | Container Shows library root |
@@ -136,19 +169,41 @@ The Compose stack has no Docker socket, uses `no-new-privileges`, runs under
 | `TZ` | `UTC` | Container timezone |
 
 `AUTH_USERNAME` and `AUTH_PASSWORD` must both be set or both be unset. The UI
-shows a warning when authentication is disabled.
+shows a warning when authentication is disabled. Use HTTPS or a trusted private
+network when Basic Auth is enabled.
 
 Operational settings are editable in the UI and persisted in SQLite:
 
 - default scan depth and debug logging;
 - conversion `--safe` and `--verbose` defaults;
-- scheduled Smart Scan state and interval in minutes, hours, days, or weeks;
+- scheduled Smart Scan state and interval;
 - webhook state and Radarr/Sonarr path mappings;
-- backup retention, acknowledged safe-MEL automation, and per-format automatic
-  full inspection.
+- backup retention;
+- acknowledged safe-MEL automation;
+- per-format automatic full inspection.
 
-Library paths remain deployment-controlled. New installs expose two stable
-library roots by default:
+Environment variables remain the deployment defaults. Each queued job stores a
+snapshot of its effective options, so later settings changes do not alter
+already queued work. Safe-MEL automation and scheduled scans are disabled
+initially. Retention never causes automatic deletion.
+
+Set `STOP_GRACE_PERIOD` at least ten seconds higher than
+`SHUTDOWN_GRACE_SECONDS`. Conversion estimates reserve 110% of the source size
+on both media and temporary filesystems, plus `DISK_RESERVE_GIB`. When both
+paths share a filesystem, the two conversion estimates are combined and the
+reserve is added once.
+
+Each conversion receives an isolated directory under
+`TEMP_DIR/dovi-manager/job-ID`. Only directories matching that application-owned
+pattern are cleaned.
+
+The CSRF secret is generated on first startup at `/config/csrf-secret` with
+mode `0600`. Keep it with the rest of the configuration backup. A missing
+secret is regenerated; an unreadable or malformed secret prevents startup.
+
+## Media Roots
+
+New installs expose two stable library roots by default:
 
 ```json
 [
@@ -164,7 +219,7 @@ root remains in historical database records but is inactive until the same ID
 is configured again.
 
 For each additional library, add one bind mount and create
-`/config/media-roots.json` with only the extra roots. For example:
+`/config/media-roots.json` with only the extra roots:
 
 ```yaml
 environment:
@@ -188,34 +243,15 @@ Legacy `ADDITIONAL_MEDIA_ROOTS_JSON` remains supported when
 `/config/media-roots.json` is absent, but new deployments should prefer the
 file because it is easier to read and avoids JSON quoting in `.env`.
 
-Environment variables remain the deployment defaults. Each queued job stores a
-snapshot of its effective options, so later settings changes do not alter
-already queued work. Safe-MEL automation and scheduled scans are disabled
-initially. Retention never causes automatic deletion.
-
-Set `STOP_GRACE_PERIOD` at least ten seconds higher than
-`SHUTDOWN_GRACE_SECONDS`. Conversion estimates reserve 110% of the source size
-on both media and temporary filesystems, plus `DISK_RESERVE_GIB`. When both
-paths share a filesystem, the two conversion estimates are combined and the
-reserve is added once.
-
-Each conversion receives an isolated directory under
-`TEMP_DIR/dovi-manager/job-ID`. Only directories matching that application
-owned pattern are cleaned.
-
-The CSRF secret is generated on first startup at `/config/csrf-secret` with
-mode `0600`. Keep it with the rest of the configuration backup. A missing
-secret is regenerated; an unreadable or malformed secret prevents startup.
-
-## Scan modes
+## Scan Modes
 
 - **Full Scan** scans all configured roots, or one selected root, to the
   configured depth and replaces the matching candidate and inventory snapshot.
 - **Smart Scan** inventories the same selected scope but invokes
   `dovi_convert` only for new files or files whose size or modification time
   changed. Deleted inventory entries are deactivated without a CLI call.
-- **Custom Scan** targets one root and relative directory with per-run recursion,
-  depth, and debug options. Only that scope is reconciled.
+- **Custom Scan** targets one root and relative directory with per-run
+  recursion, depth, and debug options. Only that scope is reconciled.
 - **File Scan** classifies one MKV selected through the bounded live filesystem
   browser or entered as a root-relative path. The browser excludes symlinks and
   `.bak.dovi_convert` files.
@@ -241,12 +277,12 @@ MEL candidates are converted only when the separate acknowledged
 **Automatic safe MEL queueing** setting is enabled. Simple FEL remains manual
 and Complex FEL remains blocked.
 
-## Webhook automation
+## Webhook Automation
 
 Enable webhooks in Settings to generate tokenized Radarr and Sonarr endpoint
-URLs. Regenerating the token immediately invalidates every previous URL. Treat
-the complete URLs as credentials and expose them only over HTTPS or a trusted
-private network.
+URLs. Treat the complete URLs as credentials and expose them only over HTTPS or
+a trusted private network. Regenerating the token requires a confirmation page
+and invalidates every previous URL.
 
 ### Radarr
 
@@ -278,7 +314,7 @@ cannot invoke conversion directly. Unmapped paths, traversal, symlinks,
 non-MKV files, backup files, and paths outside configured roots are rejected or
 fall back to Smart Scan.
 
-## First server test
+## First Server Test
 
 Use a temporary test directory or one expendable media copy before pointing the
 app at the entire library.
@@ -301,7 +337,7 @@ app at the entire library.
 Do not enable automatic MEL queueing until manual conversion has succeeded with
 the server's actual mounts and permissions.
 
-## Reverse proxy and TLS
+## Reverse Proxy And TLS
 
 Basic Auth credentials are only protected in transit when HTTPS is used.
 Prefer one of these deployments:
@@ -313,20 +349,7 @@ Prefer one of these deployments:
 When trusting proxy headers, set `FORWARDED_ALLOW_IPS` to the proxy address or
 CIDR. Do not use `*` on an untrusted network.
 
-## Upgrades and recovery
-
-Before upgrading, back up the persistent configuration directory while the
-container is stopped:
-
-```bash
-docker stop dovi-manager
-tar -C /srv/dovi-manager -czf dovi-manager-config-backup.tgz config
-docker start dovi-manager
-```
-
-Schema migrations run transactionally at startup. A database created by a newer
-unsupported application version causes startup to fail instead of being
-downgraded.
+## Failure Recovery
 
 If the container stops during a job:
 
@@ -335,21 +358,9 @@ If the container stops during a job:
 - queued jobs remain queued;
 - original backups are not automatically removed.
 
-Restore the configuration archive only while the application is stopped.
+Restore configuration backups only while the application is stopped.
 
-### Rollback
-
-Every `main` build also publishes an immutable image tag:
-
-```text
-ghcr.io/dovi-manager/dovi-manager:sha-<full-commit>
-```
-
-Set `DOVI_MANAGER_IMAGE` in `.env` to the desired immutable tag, then pull and
-recreate the container. Set it back to `:edge` to resume the testing channel.
-Version tags such as `v0.1.0` publish `0.1.0`, `0.1`, and `latest`.
-
-## Local development
+## Local Development
 
 Python 3.12 is the supported development version.
 
@@ -367,13 +378,14 @@ New-Item -ItemType Directory -Force dev-media, dev-shows, dev-cache, config
 python -m uvicorn app.main:app --reload
 ```
 
-Run tests:
+Run checks:
 
 ```powershell
 python -m pytest
-python -m compileall -q app tests
-python -m ruff check app tests
-python -m ruff format --check app tests
+python -m compileall -q app scripts tests
+python -m ruff check app scripts tests
+python -m ruff format --check app scripts tests
+python scripts/public_audit.py
 ```
 
 Tests use temporary fake media files and fake subprocess runners. Real media is
@@ -388,7 +400,7 @@ docker compose \
   up --build
 ```
 
-## Current limitations
+## Current Limitations
 
 - No outbound notifications
 - No Complex FEL conversion
@@ -399,6 +411,3 @@ docker compose \
   truncated filenames fail the scan without replacing the previous snapshot
 - `/healthz` is liveness only; `/readyz` validates the worker, database,
   storage permissions, and required conversion tools
-
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream licensing and
-source information.

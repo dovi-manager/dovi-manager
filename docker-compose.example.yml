@@ -1,6 +1,6 @@
 services:
   dovi-manager:
-    image: "${DOVI_MANAGER_IMAGE:-ghcr.io/dovi-manager/dovi-manager:edge}"
+    image: "${DOVI_MANAGER_IMAGE:-ghcr.io/dovi-manager/dovi-manager:latest}"
     pull_policy: always
     container_name: dovi-manager
     ports:
