@@ -125,18 +125,25 @@
             <div class="mapping-editor">
               <div class="section-heading compact"><div><span class="eyebrow">Path translation</span><h3>Radarr and Sonarr mappings {{ info_tip("Map the path prefix visible inside Radarr or Sonarr to the matching library mount in dovi-manager. When mappings overlap, the longest matching prefix wins.") }}</h3></div></div>
               {% set rows = webhook_mappings if webhook_mappings else [{"integration":"radarr","external_prefix":runtime.radarr_root_prefix,"root_id":"default"}] %}
-              {% for mapping in rows %}
-                <div class="mapping-row">
-                  <select name="mapping_integration" aria-label="Integration"><option value="radarr" {% if mapping.integration == "radarr" %}selected{% endif %}>Radarr</option><option value="sonarr" {% if mapping.integration == "sonarr" %}selected{% endif %}>Sonarr</option></select>
-                  <input name="mapping_prefix" value="{{ mapping.external_prefix }}" placeholder="/movies or /tv" aria-label="External path prefix">
-                  <select name="mapping_root_id" aria-label="Target library">{% for root in media_roots %}<option value="{{ root.id }}" {% if mapping.root_id == root.id %}selected{% endif %}>{{ root.label }}</option>{% endfor %}</select>
-                </div>
-              {% endfor %}
-              <div class="mapping-row">
-                <select name="mapping_integration" aria-label="Additional integration"><option value="radarr">Radarr</option><option value="sonarr">Sonarr</option></select>
-                <input name="mapping_prefix" placeholder="Optional additional prefix" aria-label="Additional external path prefix">
-                <select name="mapping_root_id" aria-label="Additional target library">{% for root in media_roots %}<option value="{{ root.id }}">{{ root.label }}</option>{% endfor %}</select>
+              <div class="mapping-list" data-mapping-list>
+                {% for mapping in rows %}
+                  <div class="mapping-row">
+                    <select name="mapping_integration" aria-label="Integration"><option value="radarr" {% if mapping.integration == "radarr" %}selected{% endif %}>Radarr</option><option value="sonarr" {% if mapping.integration == "sonarr" %}selected{% endif %}>Sonarr</option></select>
+                    <input name="mapping_prefix" value="{{ mapping.external_prefix }}" placeholder="/movies or /tv" aria-label="External path prefix">
+                    <select name="mapping_root_id" aria-label="Target library">{% for root in media_roots %}<option value="{{ root.id }}" {% if mapping.root_id == root.id %}selected{% endif %}>{{ root.label }}</option>{% endfor %}</select>
+                  </div>
+                {% endfor %}
               </div>
+              <div class="mapping-actions">
+                <button class="secondary" type="button" data-add-mapping>{{ icon("plus") }} Add mapping</button>
+              </div>
+              <template data-mapping-template>
+                <div class="mapping-row">
+                  <select name="mapping_integration" aria-label="Integration"><option value="radarr">Radarr</option><option value="sonarr">Sonarr</option></select>
+                  <input name="mapping_prefix" placeholder="/movies or /tv" aria-label="External path prefix">
+                  <select name="mapping_root_id" aria-label="Target library">{% for root in media_roots %}<option value="{{ root.id }}">{{ root.label }}</option>{% endfor %}</select>
+                </div>
+              </template>
             </div>
             {% if runtime.webhooks_enabled and webhook_token %}
               <div class="webhook-endpoints">

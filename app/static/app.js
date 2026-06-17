@@ -356,6 +356,20 @@ function setupInspectionGate() {
   update();
 }
 
+function setupMappingEditor() {
+  const editor = document.querySelector(".mapping-editor");
+  const list = editor?.querySelector("[data-mapping-list]");
+  const template = editor?.querySelector("[data-mapping-template]");
+  const addButton = editor?.querySelector("[data-add-mapping]");
+  if (!editor || !list || !template || !addButton) return;
+
+  addButton.addEventListener("click", () => {
+    const row = template.content.firstElementChild.cloneNode(true);
+    list.appendChild(row);
+    row.querySelector("input")?.focus();
+  });
+}
+
 function setupFileBrowser() {
   const openButton = document.querySelector("[data-file-browser-open]");
   const dialog = document.querySelector("[data-file-browser-dialog]");
@@ -507,6 +521,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupBackupSelection();
   setupAutomationToggle();
   setupInspectionGate();
+  setupMappingEditor();
   setupFileBrowser();
   setupCopyFields();
   setupRecursiveControls();

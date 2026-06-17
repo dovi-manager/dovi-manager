@@ -1042,6 +1042,9 @@ def test_settings_render_tooltips_schedule_units_and_sonarr(
     assert 'name="schedule_start_time"' in response.text
     assert 'name="allow_backup_retention_override"' in response.text
     assert "Sonarr" in response.text
+    assert "data-add-mapping" in response.text
+    assert "data-mapping-template" in response.text
+    assert "Optional additional prefix" not in response.text
 
 
 def test_simple_fel_route_requires_and_records_manual_approval(
