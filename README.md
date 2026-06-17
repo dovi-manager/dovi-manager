@@ -1,50 +1,65 @@
 # dovi-manager
 
-`dovi-manager` is a Dockerized, server-rendered web UI for
-[`dovi_convert`](https://github.com/cryptochrome/dovi_convert). It scans media
-libraries for Dolby Vision Profile 7 MKV files and serializes safe conversions
+`dovi-manager` is a Dockerized web UI for
+[`dovi_convert`](https://github.com/cryptochrome/dovi_convert). It scans your
+media library for Dolby Vision Profile 7 MKV files and helps convert safe files
 to Profile 8.1.
 
-The app wraps the existing CLI. It does not reimplement Dolby Vision conversion
-logic.
+This project does not implement Dolby Vision conversion itself. All conversion
+work is done by `dovi_convert`; dovi-manager adds a browser UI, queueing,
+history, safety checks, backups, and Radarr/Sonarr automation around it.
 
-## What The Image Includes
+Credit goes to [cryptochrome/dovi_convert](https://github.com/cryptochrome/dovi_convert)
+for the actual media conversion engine.
+
+## What It Does
+
+- Scans one or more media roots for Dolby Vision Profile 7 MKVs.
+- Shows candidates grouped as safe MEL, Simple FEL, Complex FEL, and scan errors.
+- Converts safe MEL files to Profile 8.1 manually, or automatically if enabled.
+- Keeps Simple FEL conversion manual and blocks Complex FEL conversion.
+- Runs one background job at a time with logs and status.
+- Keeps original files as `.mkv.bak.dovi_convert` backups.
+- Provides a Backups page for reviewed, confirmed deletion.
+- Supports scheduled Smart Scans and Radarr/Sonarr webhooks.
+
+Safety defaults:
+
+- dovi-manager never passes `--force` or `--delete` to `dovi_convert`.
+- Files must stay under configured media roots.
+- Files being written to are skipped.
+- Backup deletion always requires confirmation.
+
+## Docker Image
 
 No separate `cryptochrome/dovi_convert` container is required.
 
-The published `ghcr.io/dovi-manager/dovi-manager` image is built from the
-pinned upstream base image `cryptochrome/dovi_convert:8.2.0` and invokes the
-bundled `dovi_convert` binary directly. Docker only pulls
-`cryptochrome/dovi_convert:8.2.0` when you build dovi-manager locally. Normal
-installs pull one dovi-manager image.
+The published dovi-manager image is built from the pinned upstream
+`cryptochrome/dovi_convert:8.2.0` image and includes the CLI. Normal users pull
+one image:
 
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream source and
-license information.
+```text
+ghcr.io/dovi-manager/dovi-manager:latest
+```
 
-## Safety Model
+Tags:
 
-- Safe MEL files can be manually queued or optionally auto-queued.
-- Simple FEL files always require explicit manual approval.
-- Complex FEL files can be inspected but cannot be converted.
-- `--force` and `--delete` are never passed to `dovi_convert`.
-- Every conversion preserves the original as `.mkv.bak.dovi_convert`.
-- Files must resolve beneath a configured media root.
-- Files must remain unchanged since scanning and stable before conversion.
-- Conversion starts only after write-permission and conservative free-space checks.
-- Backup deletion requires a review page and confirmation.
-- Every mutation uses CSRF protection.
-- Only one background job runs at a time.
+- `latest`: latest stable release
+- `0.1.0`, `0.1`, etc.: versioned release tags
+- `edge`: latest successful `main` build
+- `sha-<full-commit>`: immutable rollback/debug tag
 
-## Docker Quick Start
+`stable` is not published; use `latest` for the stable channel.
 
-Copy `docker-compose.example.yml` and `.env.example` to the host that can read
-and write the media library:
+## Install
+
+Copy the example files:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit at least these values:
+Edit `.env`:
 
 ```dotenv
 DOVI_MANAGER_IMAGE=ghcr.io/dovi-manager/dovi-manager:latest
@@ -61,177 +76,68 @@ AUTH_USERNAME=admin
 AUTH_PASSWORD=replace-with-a-long-unique-password
 ```
 
-Create writable cache and config directories:
+Create writable cache/config folders, then start:
 
 ```bash
 mkdir -p /srv/dovi-manager/cache /srv/dovi-manager/config
 chown 1000:1000 /srv/dovi-manager/cache /srv/dovi-manager/config
-```
 
-The configured `PUID:PGID` also needs read, write, and rename permission in the
-media libraries. Conversion replaces the source path and creates a sibling
-backup, so read-only media mounts cannot work.
-
-Start the service:
-
-```bash
 docker compose --env-file .env -f docker-compose.example.yml up -d
 ```
 
-Open `http://SERVER_IP:8000/`, then check `/readyz` before scanning a full
-library.
+Open `http://SERVER_IP:8000/`.
 
-The Compose stack has no Docker socket, uses `no-new-privileges`, runs under
-`PUID:PGID`, and mounts the container root filesystem read-only.
+The container needs read/write/rename access to the media folders because
+conversion replaces the source file and writes a sibling backup.
 
-## Docker Image Tags
+## Basic Use
 
-| Tag | Purpose |
-| --- | --- |
-| `latest` | Latest stable GitHub release. Recommended for normal installs. |
-| `0.1.0`, `0.1`, etc. | Versioned release tags. Use these when you want pinned upgrades. |
-| `edge` | Latest successful `main` build. Use for testing upcoming changes. |
-| `sha-<full-commit>` | Immutable build tag for rollback and debugging. |
+1. Open Settings and confirm storage, helper tools, authentication, and media roots.
+2. Run a scan from the Dashboard or Scan Center.
+3. Review candidates before converting anything.
+4. Try one copied MEL file first.
+5. Confirm the converted file plays correctly before enabling automation.
 
-`stable` is not published. It would be another moving alias for the same stable
-release channel, so this project uses `latest` plus versioned tags instead.
+Smart Scan only calls `dovi_convert` for new or changed files. Full Scan
+rescans the selected root. File Scan targets one MKV.
 
-Release tags must use `vMAJOR.MINOR.PATCH`. A tag such as `v0.1.0` publishes
-`0.1.0`, `0.1`, and `latest`. Every successful `main` build publishes `edge`
-and `sha-<full-commit>`.
+## Radarr And Sonarr
 
-## Updating And Rollback
+Enable webhooks in Settings to generate tokenized URLs. Treat the full webhook
+URLs as credentials and expose them only over HTTPS or a trusted private network.
 
-For stable installs, pull the current release image and recreate the container:
+### Radarr
 
-```bash
-docker compose --env-file .env -f docker-compose.example.yml pull
-docker compose --env-file .env -f docker-compose.example.yml up -d
-```
+1. In dovi-manager Settings, add a Radarr path mapping.
+2. Enter the path Radarr sees, for example `/movies`.
+3. Select the matching dovi-manager root, usually `Movies`.
+4. In Radarr, add a Webhook connection using the generated Radarr URL.
+5. Enable download/import and rename events.
+6. Use Radarr's Test action.
 
-Verify the deployed revision:
+Download/import events queue exact File Scans. Rename events queue a Smart Scan
+for the mapped root. Unmapped or incomplete events fall back to a global Smart
+Scan.
 
-```bash
-curl http://SERVER_IP:8000/versionz
-```
+### Sonarr
 
-To roll back, set `DOVI_MANAGER_IMAGE` in `.env` to an immutable
-`ghcr.io/dovi-manager/dovi-manager:sha-<full-commit>` tag, then pull and
-recreate the container. Set it back to `:latest` to resume the stable channel or
-`:edge` to follow main-branch builds.
+1. In dovi-manager Settings, add a Sonarr path mapping.
+2. Enter the path Sonarr sees, for example `/tv`.
+3. Select the matching dovi-manager root, usually `Shows`.
+4. In Sonarr, add a Webhook connection using the generated Sonarr URL.
+5. Enable download/import and rename events.
+6. Use Sonarr's Test action.
 
-Before upgrading, back up the persistent configuration directory while the
-container is stopped:
+Download/import events use Sonarr episode file paths and queue exact File
+Scans. Rename events queue a Smart Scan for the mapped root. Unmapped or
+incomplete events fall back to a global Smart Scan.
 
-```bash
-docker stop dovi-manager
-tar -C /srv/dovi-manager -czf dovi-manager-config-backup.tgz config
-docker start dovi-manager
-```
+Webhook requests can request scans only. They cannot queue conversions directly.
 
-Schema migrations run transactionally at startup. A database created by a newer
-unsupported application version causes startup to fail instead of being
-downgraded.
+## Extra Media Roots
 
-## Pages
-
-- Dashboard with candidate, job, backup, and worker status
-- Scan Center with Full, Smart, Custom, and File scan workflows
-- Candidates grouped as MEL, Simple FEL, Complex FEL, and scan errors
-- Jobs with command details, bounded logs, states, and queued cancellation
-- Backups with retention and orphan protection
-- Settings/status with storage, helper tools, authentication, webhooks, and automation
-
-## Configuration
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `DOVI_MANAGER_IMAGE` | `ghcr.io/dovi-manager/dovi-manager:latest` | Image tag or immutable rollback tag |
-| `MEDIA_ROOT` | `/media2/movies` | Container Movies library root |
-| `MEDIA_ROOT_LABEL` | `Movies` | Display label for the backward-compatible default root |
-| `SHOWS_ROOT` | `/media2/shows` | Container Shows library root |
-| `SHOWS_ROOT_LABEL` | `Shows` | Display label for the Shows root |
-| `TEMP_DIR` | `/cache` | Fast temporary storage for conversion |
-| `CONFIG_DIR` | `/config` | Persistent application data |
-| `DB_PATH` | `/config/dovi-manager.db` | SQLite database |
-| `SCAN_DEPTH` | `5` | Recursive `dovi_convert scan` depth |
-| `STABILITY_SECONDS` | `30` | Required unchanged period before conversion |
-| `RETENTION_DAYS` | `30` | Initial backup deletion threshold |
-| `JOB_LOG_LIMIT` | `1000000` | Maximum stored characters per job |
-| `SCAN_OUTPUT_LIMIT_BYTES` | `20971520` | Maximum scan output retained for parsing |
-| `DISK_RESERVE_GIB` | `2` | Free space retained beyond conversion estimates |
-| `DOVI_CONVERT_PATH` | `dovi_convert` | CLI executable |
-| `AUTH_USERNAME` | unset | Optional Basic Auth username |
-| `AUTH_PASSWORD` | unset | Optional Basic Auth password |
-| `SHUTDOWN_GRACE_SECONDS` | `20` | CLI cleanup time during shutdown |
-| `STOP_GRACE_PERIOD` | `45s` | Compose container shutdown allowance |
-| `PUID` / `PGID` | `1000` | Numeric container process identity |
-| `TZ` | `UTC` | Container timezone |
-
-`AUTH_USERNAME` and `AUTH_PASSWORD` must both be set or both be unset. The UI
-shows a warning when authentication is disabled. Use HTTPS or a trusted private
-network when Basic Auth is enabled.
-
-Operational settings are editable in the UI and persisted in SQLite:
-
-- default scan depth and debug logging;
-- conversion `--safe` and `--verbose` defaults;
-- scheduled Smart Scan state and interval;
-- webhook state and Radarr/Sonarr path mappings;
-- backup retention;
-- acknowledged safe-MEL automation;
-- per-format automatic full inspection.
-
-Environment variables remain the deployment defaults. Each queued job stores a
-snapshot of its effective options, so later settings changes do not alter
-already queued work. Safe-MEL automation and scheduled scans are disabled
-initially. Retention never causes automatic deletion.
-
-Set `STOP_GRACE_PERIOD` at least ten seconds higher than
-`SHUTDOWN_GRACE_SECONDS`. Conversion estimates reserve 110% of the source size
-on both media and temporary filesystems, plus `DISK_RESERVE_GIB`. When both
-paths share a filesystem, the two conversion estimates are combined and the
-reserve is added once.
-
-Each conversion receives an isolated directory under
-`TEMP_DIR/dovi-manager/job-ID`. Only directories matching that application-owned
-pattern are cleaned.
-
-The CSRF secret is generated on first startup at `/config/csrf-secret` with
-mode `0600`. Keep it with the rest of the configuration backup. A missing
-secret is regenerated; an unreadable or malformed secret prevents startup.
-
-## Media Roots
-
-New installs expose two stable library roots by default:
-
-```json
-[
-  {"id": "default", "label": "Movies", "path": "/media2/movies"},
-  {"id": "shows", "label": "Shows", "path": "/media2/shows"}
-]
-```
-
-`default` is the backward-compatible Movies root and `shows` is the built-in
-Shows root. IDs must remain stable because candidates, inventory, jobs, and
-webhook requests store them. Roots may not overlap or use symlinks. A removed
-root remains in historical database records but is inactive until the same ID
-is configured again.
-
-For each additional library, add one bind mount and create
-`/config/media-roots.json` with only the extra roots:
-
-```yaml
-environment:
-  MEDIA_ROOT: /media2/movies
-  MEDIA_ROOT_LABEL: Movies
-  SHOWS_ROOT: /media2/shows
-  SHOWS_ROOT_LABEL: Shows
-volumes:
-  - /srv/media/movies:/media2/movies
-  - /srv/media/shows:/media2/shows
-  - /srv/media/anime:/media2/anime
-```
+The compose example includes Movies and Shows. For more roots, add another bind
+mount and create `/config/media-roots.json`:
 
 ```json
 [
@@ -239,175 +145,17 @@ volumes:
 ]
 ```
 
-Legacy `ADDITIONAL_MEDIA_ROOTS_JSON` remains supported when
-`/config/media-roots.json` is absent, but new deployments should prefer the
-file because it is easier to read and avoids JSON quoting in `.env`.
+Root IDs should remain stable because candidates, jobs, and webhook mappings
+refer to them.
 
-## Scan Modes
-
-- **Full Scan** scans all configured roots, or one selected root, to the
-  configured depth and replaces the matching candidate and inventory snapshot.
-- **Smart Scan** inventories the same selected scope but invokes
-  `dovi_convert` only for new files or files whose size or modification time
-  changed. Deleted inventory entries are deactivated without a CLI call.
-- **Custom Scan** targets one root and relative directory with per-run
-  recursion, depth, and debug options. Only that scope is reconciled.
-- **File Scan** classifies one MKV selected through the bounded live filesystem
-  browser or entered as a root-relative path. The browser excludes symlinks and
-  `.bak.dovi_convert` files.
-
-**Full RPU Inspection** is the existing `dovi_convert inspect` operation. It
-performs frame-by-frame analysis, appears in Scan Center and candidate history,
-and remains manually available. Settings can automatically inspect changed
-MEL, Simple FEL, and Complex FEL candidates independently. These options
-default off and never authorize conversion.
-
-The first Smart Scan after upgrading scans every eligible MKV because older
-database versions did not record non-candidate files. Unchanged scan errors are
-not retried automatically; use File Scan to retry one explicitly.
-
-Scheduled discovery uses the same single worker and never overlaps another
-scan. Enabling the schedule queues an initial global Smart Scan. Later scans
-check every enabled root after the configured interval, measured from
-completion of the previous scheduled scan. Intervals range from 5 minutes
-through 52 weeks.
-
-Discovery automation does not independently authorize conversion. Newly found
-MEL candidates are converted only when the separate acknowledged
-**Automatic safe MEL queueing** setting is enabled. Simple FEL remains manual
-and Complex FEL remains blocked.
-
-## Webhook Automation
-
-Enable webhooks in Settings to generate tokenized Radarr and Sonarr endpoint
-URLs. Treat the complete URLs as credentials and expose them only over HTTPS or
-a trusted private network. Regenerating the token requires a confirmation page
-and invalidates every previous URL.
-
-### Radarr
-
-1. Add a Radarr path mapping in Settings. Enter the movie path visible inside
-   Radarr, for example `/movies`, and select the `Movies` root.
-2. In Radarr, add a Webhook connection using the generated Radarr URL.
-3. Enable download/import and rename events, then use Radarr's Test action.
-
-Download/import events beneath a configured mapping queue exact File Scans in
-the target root. Rename events queue a Smart Scan for the mapped root so both
-new paths and removed inventory paths are reconciled. Missing or unmappable
-events safely fall back to global Smart Scan. When prefixes overlap, the
-longest matching prefix wins. Test events never queue work.
-
-### Sonarr
-
-1. Add a Sonarr mapping for each shows path visible inside Sonarr, such as
-   `/tv`, and select the `Shows` root.
-2. In Sonarr, add a Webhook connection using the generated Sonarr URL.
-3. Enable download/import and rename events, then run Sonarr's Test action.
-
-Download/import events use `episodeFile.path` or `episodeFiles[].path` and
-queue exact File Scans. Rename events queue a Smart Scan for the mapped root so
-both the new file and removed inventory path are reconciled. Incomplete or
-unmapped payloads safely fall back to a global Smart Scan.
-
-Webhook requests are limited to 64 KiB, independently token-authenticated, and
-cannot invoke conversion directly. Unmapped paths, traversal, symlinks,
-non-MKV files, backup files, and paths outside configured roots are rejected or
-fall back to Smart Scan.
-
-## First Server Test
-
-Use a temporary test directory or one expendable media copy before pointing the
-app at the entire library.
-
-1. Confirm `/healthz` returns exactly `{"status":"ok"}`.
-2. Confirm `/versionz` reports the expected Git revision.
-3. Confirm `/readyz` returns status `200` and every check is `true`.
-4. Open Settings and verify every helper tool is found.
-5. Confirm media, cache, and config storage show available space.
-6. Hard-refresh the page and run a scan.
-7. Review MEL, Simple FEL, and Complex FEL classifications.
-8. Queue an inspection and check its captured log.
-9. Convert one copied MEL file.
-10. Verify the converted MKV exists at the original path.
-11. Verify the original exists as `.mkv.bak.dovi_convert` at the original size.
-12. Confirm your media server can play the converted file before considering deletion.
-13. Lower retention only for testing, review the backup deletion page, and
-    confirm orphaned backups remain protected.
-
-Do not enable automatic MEL queueing until manual conversion has succeeded with
-the server's actual mounts and permissions.
-
-## Reverse Proxy And TLS
-
-Basic Auth credentials are only protected in transit when HTTPS is used.
-Prefer one of these deployments:
-
-- expose the service only on a trusted private network;
-- place it behind an HTTPS reverse proxy with its own authentication; or
-- enable application Basic Auth and terminate TLS at the reverse proxy.
-
-When trusting proxy headers, set `FORWARDED_ALLOW_IPS` to the proxy address or
-CIDR. Do not use `*` on an untrusted network.
-
-## Failure Recovery
-
-If the container stops during a job:
-
-- the active CLI receives `SIGINT` and gets a cleanup grace period;
-- a job left in `running` is marked failed on restart;
-- queued jobs remain queued;
-- original backups are not automatically removed.
-
-Restore configuration backups only while the application is stopped.
-
-## Local Development
-
-Python 3.12 is the supported development version.
+## Development
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
-
-$env:MEDIA_ROOT = "$PWD\dev-media"
-$env:SHOWS_ROOT = "$PWD\dev-shows"
-$env:TEMP_DIR = "$PWD\dev-cache"
-$env:CONFIG_DIR = "$PWD\config"
-
-New-Item -ItemType Directory -Force dev-media, dev-shows, dev-cache, config
-python -m uvicorn app.main:app --reload
-```
-
-Run checks:
-
-```powershell
 python -m pytest
-python -m compileall -q app scripts tests
-python -m ruff check app scripts tests
-python -m ruff format --check app scripts tests
-python scripts/public_audit.py
 ```
 
-Tests use temporary fake media files and fake subprocess runners. Real media is
-not required.
-
-For a local Docker build, combine the deployment file with the build override:
-
-```bash
-docker compose \
-  -f docker-compose.example.yml \
-  -f docker-compose.local.yml \
-  up --build
-```
-
-## Current Limitations
-
-- No outbound notifications
-- No Complex FEL conversion
-- No automatic safe-mode retry after a standard conversion failure
-- No compact `.dovi` backup/restore workflow
-- No running-job cancellation from the UI
-- Scan parsing targets the human table output of `dovi_convert 8.2.0`; ambiguous
-  truncated filenames fail the scan without replacing the previous snapshot
-- `/healthz` is liveness only; `/readyz` validates the worker, database,
-  storage permissions, and required conversion tools
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream licensing and
+source information.
