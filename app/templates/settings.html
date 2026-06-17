@@ -67,7 +67,7 @@
                 <span class="alert-icon">{{ icon("alert") }}</span>
                 <div><strong>Conversion automation modifies media</strong><span>It remains serialized and never includes Simple or Complex FEL files.</span></div>
               </div>
-              <label class="approval-check compact-check">
+              <label class="approval-check compact-check {% if runtime.auto_queue_mel %}hidden{% endif %}" data-automation-ack-wrapper>
                 <input type="checkbox" name="automation_acknowledged" value="yes" data-automation-ack>
                 <span><strong>I acknowledge the automation behavior</strong><small>Required when enabling this setting for the first time.</small></span>
               </label>
@@ -154,12 +154,20 @@
             {% if runtime.webhooks_enabled and webhook_token %}
               <div class="webhook-endpoints">
                 <label for="radarr-webhook-url">Radarr webhook URL</label>
-                <div class="copy-field"><input id="radarr-webhook-url" readonly value="{{ webhook_base_url }}/webhooks/radarr/{{ webhook_token }}"><button class="secondary" type="button" data-copy-value="#radarr-webhook-url">{{ icon("copy") }} Copy</button></div>
+                <div class="copy-field">
+                  <input id="radarr-webhook-url" type="password" readonly autocomplete="off" spellcheck="false" value="{{ webhook_base_url }}/webhooks/radarr/{{ webhook_token }}">
+                  <button class="secondary" type="button" data-secret-toggle="#radarr-webhook-url" aria-pressed="false">{{ icon("lock") }} <span data-secret-toggle-label>Reveal</span></button>
+                  <button class="secondary" type="button" data-copy-value="#radarr-webhook-url">{{ icon("copy") }} Copy</button>
+                </div>
                 <label for="sonarr-webhook-url">Sonarr webhook URL</label>
-                <div class="copy-field"><input id="sonarr-webhook-url" readonly value="{{ webhook_base_url }}/webhooks/sonarr/{{ webhook_token }}"><button class="secondary" type="button" data-copy-value="#sonarr-webhook-url">{{ icon("copy") }} Copy</button></div>
+                <div class="copy-field">
+                  <input id="sonarr-webhook-url" type="password" readonly autocomplete="off" spellcheck="false" value="{{ webhook_base_url }}/webhooks/sonarr/{{ webhook_token }}">
+                  <button class="secondary" type="button" data-secret-toggle="#sonarr-webhook-url" aria-pressed="false">{{ icon("lock") }} <span data-secret-toggle-label>Reveal</span></button>
+                  <button class="secondary" type="button" data-copy-value="#sonarr-webhook-url">{{ icon("copy") }} Copy</button>
+                </div>
                 <div class="webhook-action-row">
-                  <button class="danger" type="submit" form="webhook-token-regenerate-form">{{ icon("lock") }} Regenerate webhook token</button>
-                  <small>Immediately invalidates both current webhook URLs.</small>
+                  <a class="button danger" href="/settings/webhook-token/regenerate/confirm">{{ icon("lock") }} Regenerate webhook token</a>
+                  <small>Requires confirmation and immediately invalidates both current webhook URLs.</small>
                 </div>
               </div>
             {% endif %}
@@ -182,12 +190,6 @@
 
           <div class="settings-save sticky-settings-save"><button type="submit">{{ icon("check") }} Save operational settings</button></div>
       </form>
-
-      {% if runtime.webhooks_enabled and webhook_token %}
-        <form id="webhook-token-regenerate-form" class="hidden" action="/settings/webhook-token/regenerate" method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        </form>
-      {% endif %}
 
       <section class="panel settings-section">
         <div class="settings-section-header">

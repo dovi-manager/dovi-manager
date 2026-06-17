@@ -334,9 +334,16 @@ def test_regenerating_webhook_token_invalidates_previous_url(
                 "webhook_token": "old-token",
             }
         )
-        regenerated = client.post(
+        confirmation = client.get("/settings/webhook-token/regenerate/confirm")
+        unconfirmed = client.post(
             "/settings/webhook-token/regenerate",
             data=csrf_data(app),
+            follow_redirects=False,
+        )
+        token_after_unconfirmed = repository.get_setting("webhook_token", "")
+        regenerated = client.post(
+            "/settings/webhook-token/regenerate",
+            data=csrf_data(app, confirmed="yes"),
             follow_redirects=False,
         )
         new_token = repository.get_setting("webhook_token", "")
@@ -349,6 +356,15 @@ def test_regenerating_webhook_token_invalidates_previous_url(
             json={"eventType": "Test"},
         )
 
+    assert confirmation.status_code == 200
+    assert "Regenerate webhook token" in confirmation.text
+    assert 'name="confirmed"' in confirmation.text
+    assert unconfirmed.status_code == 303
+    assert (
+        unconfirmed.headers["location"]
+        == "/settings/webhook-token/regenerate/confirm?error=Confirm%20webhook%20token%20regeneration%20before%20continuing."
+    )
+    assert token_after_unconfirmed == "old-token"
     assert regenerated.status_code == 303
     assert "#webhooks" in regenerated.headers["location"]
     assert new_token and new_token != "old-token"
@@ -810,6 +826,9 @@ def test_backup_retention_override_is_settings_gated(tmp_path: Path) -> None:
         job = app.state.repository.get_job(1)
 
     assert "disabled" in locked.text
+    assert "No backups are eligible for deletion yet." in locked.text
+    assert 'data-select-eligible disabled' in locked.text
+    assert 'data-clear-selection disabled' in locked.text
     assert 'data-retention-override="true"' in unlocked.text
     assert "Retention override selected" in confirm.text
     assert delete.status_code == 303
@@ -1023,8 +1042,8 @@ def test_settings_generate_webhooks_button_saves_mappings_and_returns_to_section
     ]
     assert 'data-copy-value="#radarr-webhook-url"' in settings_page.text
     assert 'data-copy-value="#sonarr-webhook-url"' in settings_page.text
-    assert 'form="webhook-token-regenerate-form"' in settings_page.text
-    assert 'id="webhook-token-regenerate-form"' in settings_page.text
+    assert 'type="password" readonly' in settings_page.text
+    assert 'href="/settings/webhook-token/regenerate/confirm"' in settings_page.text
 
 
 def test_inspection_gate_forces_mel_auto_inspection(tmp_path: Path) -> None:
@@ -1090,6 +1109,45 @@ def test_settings_render_tooltips_schedule_units_and_sonarr(
     assert "data-add-mapping" in response.text
     assert "data-mapping-template" in response.text
     assert "Optional additional prefix" not in response.text
+
+
+def test_settings_masks_webhook_urls_and_links_rotation_confirmation(
+    tmp_path: Path,
+) -> None:
+    app = create_app(make_settings(tmp_path), start_worker=False)
+
+    with TestClient(app) as client:
+        app.state.repository.set_settings(
+            {
+                "webhooks_enabled": "true",
+                "webhook_token": "secret-token",
+            }
+        )
+        response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert 'id="radarr-webhook-url" type="password"' in response.text
+    assert 'id="sonarr-webhook-url" type="password"' in response.text
+    assert 'data-secret-toggle="#radarr-webhook-url"' in response.text
+    assert 'data-copy-value="#radarr-webhook-url"' in response.text
+    assert 'href="/settings/webhook-token/regenerate/confirm"' in response.text
+    assert 'action="/settings/webhook-token/regenerate"' not in response.text
+
+
+def test_automation_acknowledgement_is_hidden_when_already_enabled(
+    tmp_path: Path,
+) -> None:
+    app = create_app(make_settings(tmp_path), start_worker=False)
+
+    with TestClient(app) as client:
+        app.state.repository.set_settings({"auto_queue_mel": "true"})
+        response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert 'data-initial="true"' in response.text
+    assert 'approval-check compact-check hidden" data-automation-ack-wrapper' in (
+        response.text
+    )
 
 
 def test_simple_fel_route_requires_and_records_manual_approval(

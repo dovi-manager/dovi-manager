@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Confirm webhook token rotation - dovi-manager{% endblock %}
+{% block page_id %}webhook-token-confirm{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/settings">Settings</a>{{ icon("chevron-right") }}<span>Webhook credential</span>
+  </nav>
+
+  <section class="destructive-hero">
+    <span class="destructive-icon">{{ icon("lock") }}</span>
+    <div>
+      <div class="eyebrow">Credential rotation</div>
+      <h1>Regenerate webhook token</h1>
+      <p>This immediately invalidates the current Radarr and Sonarr webhook URLs. Connected applications must be updated before future webhook scans will work.</p>
+    </div>
+  </section>
+
+  <div class="confirmation-layout">
+    <section class="panel confirmation-main">
+      <div class="section-heading compact">
+        <div><span class="eyebrow">Current integrations</span><h2>URLs that will stop working</h2></div>
+      </div>
+      <div class="batch-list destructive-list">
+        <div><span class="file-icon">{{ icon("activity") }}</span><span><strong>Radarr webhook URL</strong><small>The current tokenized Radarr endpoint will be replaced.</small></span></div>
+        <div><span class="file-icon">{{ icon("activity") }}</span><span><strong>Sonarr webhook URL</strong><small>The current tokenized Sonarr endpoint will be replaced.</small></span></div>
+      </div>
+    </section>
+
+    <aside class="panel approval-panel danger-approval">
+      <span class="eyebrow">Final confirmation</span>
+      <h2>Rotate webhook credential?</h2>
+      <p>A new token will be generated and shown on Settings. Existing webhook URLs will return unauthorized responses.</p>
+      <form action="/settings/webhook-token/regenerate" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="approval-check danger-check">
+          <input type="checkbox" name="confirmed" value="yes" required>
+          <span><strong>I understand connected apps must be updated</strong><small>Regenerate the webhook token and invalidate the current URLs.</small></span>
+        </label>
+        <div class="stacked-actions">
+          <button class="danger" type="submit">{{ icon("lock") }} Regenerate token</button>
+          <a class="button secondary" href="/settings">Cancel</a>
+        </div>
+      </form>
+    </aside>
+  </div>
+{% endblock %}

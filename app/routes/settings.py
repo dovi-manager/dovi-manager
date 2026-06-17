@@ -264,10 +264,36 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             )
         return redirect_with_message("/settings", "Settings saved.")
 
+    @app.get("/settings/webhook-token/regenerate/confirm", response_class=HTMLResponse)
+    async def regenerate_token_confirmation(request: Request):
+        runtime = RuntimeSettings.load(ctx.settings, ctx.repository)
+        if not runtime.webhooks_enabled:
+            return redirect_with_message(
+                "/settings",
+                "Enable webhook endpoints before rotating the token.",
+                error=True,
+            )
+        ensure_webhook_token(ctx.repository)
+        return ctx.render(request, "webhook_token_confirm.html")
+
     @app.post("/settings/webhook-token/regenerate")
     async def regenerate_token(
+        confirmed: str | None = Form(default=None),
         _: None = Depends(ctx.require_csrf),
     ) -> RedirectResponse:
+        runtime = RuntimeSettings.load(ctx.settings, ctx.repository)
+        if not runtime.webhooks_enabled:
+            return redirect_with_message(
+                "/settings",
+                "Enable webhook endpoints before rotating the token.",
+                error=True,
+            )
+        if confirmed != "yes":
+            return redirect_with_message(
+                "/settings/webhook-token/regenerate/confirm",
+                "Confirm webhook token regeneration before continuing.",
+                error=True,
+            )
         regenerate_webhook_token(ctx.repository)
         return redirect_with_message(
             "/settings#webhooks",
