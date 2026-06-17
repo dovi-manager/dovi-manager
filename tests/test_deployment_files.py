@@ -4,10 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 
 
-def test_compose_uses_pullable_public_edge_image() -> None:
+def test_compose_uses_pullable_public_stable_image() -> None:
     compose = (ROOT / "docker-compose.example.yml").read_text(encoding="utf-8")
 
-    assert "ghcr.io/dovi-manager/dovi-manager:edge" in compose
+    assert "ghcr.io/dovi-manager/dovi-manager:latest" in compose
     assert "pull_policy: always" in compose
     assert "build:" not in compose
     assert "${MEDIA_PATH:-./dev-media}:/media2/movies" in compose
@@ -20,6 +20,7 @@ def test_compose_uses_pullable_public_edge_image() -> None:
 def test_env_example_uses_movies_and_shows_without_root_json() -> None:
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
 
+    assert "DOVI_MANAGER_IMAGE=ghcr.io/dovi-manager/dovi-manager:latest" in env_example
     assert "MEDIA_PATH=/path/on/host/to/movies" in env_example
     assert "SHOWS_PATH=/path/on/host/to/shows" in env_example
     assert "SHOWS_ROOT_LABEL=Shows" in env_example
@@ -54,8 +55,18 @@ def test_ci_publishes_expected_ghcr_tags_and_metadata() -> None:
     assert "type=sha,format=long,prefix=sha-" in workflow
     assert "type=semver,pattern={{version}}" in workflow
     assert "type=raw,value=latest" in workflow
+    assert "value=stable" not in workflow
     assert "platforms: linux/amd64,linux/arm64" in workflow
     assert "APP_REVISION=${{ github.sha }}" in workflow
     assert "provenance: mode=max" in workflow
     assert "sbom: true" in workflow
     assert 'FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"' in workflow
+
+
+def test_readme_documents_docker_image_channels_and_bundled_cli() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "No separate `cryptochrome/dovi_convert` container is required." in readme
+    assert "`latest`" in readme
+    assert "`edge`" in readme
+    assert "`stable` is not published" in readme
