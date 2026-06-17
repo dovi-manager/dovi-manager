@@ -1710,7 +1710,7 @@ meter.storage-bar::-moz-meter-bar {
 
 .copy-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 0.5rem;
   margin-bottom: 0.35rem;
 }

@@ -247,6 +247,8 @@ function setupBackupSelection() {
   const count = form.querySelector("[data-selected-count]");
   const size = form.querySelector("[data-selected-size]");
   const review = form.querySelector("[data-review-deletions]");
+  const selectAll = form.querySelector("[data-select-eligible]");
+  const clear = form.querySelector("[data-clear-selection]");
 
   const update = () => {
     const selected = checkboxes.filter((checkbox) => checkbox.checked);
@@ -257,16 +259,18 @@ function setupBackupSelection() {
     count.textContent = `${selected.length} selected`;
     size.textContent = humanSize(totalSize);
     review.disabled = selected.length === 0;
+    if (selectAll) selectAll.disabled = checkboxes.length === 0;
+    if (clear) clear.disabled = checkboxes.length === 0;
   };
 
   checkboxes.forEach((checkbox) => checkbox.addEventListener("change", update));
-  form.querySelector("[data-select-eligible]")?.addEventListener("click", () => {
+  selectAll?.addEventListener("click", () => {
     checkboxes.forEach((checkbox) => {
       checkbox.checked = true;
     });
     update();
   });
-  form.querySelector("[data-clear-selection]")?.addEventListener("click", () => {
+  clear?.addEventListener("click", () => {
     checkboxes.forEach((checkbox) => {
       checkbox.checked = false;
     });
@@ -325,13 +329,16 @@ function setupAutomationToggle() {
   const toggle = document.querySelector("[data-automation-toggle]");
   const disclosure = document.querySelector("[data-automation-disclosure]");
   const acknowledgement = document.querySelector("[data-automation-ack]");
+  const acknowledgementWrapper = document.querySelector("[data-automation-ack-wrapper]");
   if (!toggle || !disclosure || !acknowledgement) return;
 
   const update = () => {
-    disclosure.classList.toggle("hidden", !toggle.checked);
-    acknowledgement.required =
+    const acknowledgementRequired =
       toggle.checked && toggle.dataset.initial !== "true";
-    if (!toggle.checked) acknowledgement.checked = false;
+    disclosure.classList.toggle("hidden", !toggle.checked);
+    acknowledgement.required = acknowledgementRequired;
+    acknowledgementWrapper?.classList.toggle("hidden", !acknowledgementRequired);
+    if (!acknowledgementRequired) acknowledgement.checked = false;
   };
   toggle.addEventListener("change", update);
   update();
@@ -482,6 +489,20 @@ function setupCopyFields() {
   });
 }
 
+function setupSecretToggles() {
+  document.querySelectorAll("[data-secret-toggle]").forEach((button) => {
+    const input = document.querySelector(button.dataset.secretToggle);
+    if (!input) return;
+    button.addEventListener("click", () => {
+      const revealing = input.type === "password";
+      input.type = revealing ? "text" : "password";
+      button.setAttribute("aria-pressed", revealing ? "true" : "false");
+      const label = button.querySelector("[data-secret-toggle-label]");
+      if (label) label.textContent = revealing ? "Hide" : "Reveal";
+    });
+  });
+}
+
 function setupRecursiveControls() {
   document.querySelectorAll("[data-recursive-toggle]").forEach((toggle) => {
     const form = toggle.closest("form");
@@ -538,6 +559,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupMappingEditor();
   setupFileBrowser();
   setupCopyFields();
+  setupSecretToggles();
   setupRecursiveControls();
   setupInfoTips();
   setupSettingsSections();

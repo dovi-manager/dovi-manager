@@ -19,12 +19,13 @@
   </div>
 
   {% if backups %}
+    {% set selectable_count = eligible_count + (override_count if allow_retention_override else 0) %}
     <form action="/backups/confirm" method="post" data-backup-form>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="selection-toolbar">
         <div>
-          <button class="button secondary" type="button" data-select-eligible>{{ icon("check") }} Select all eligible</button>
-          <button class="button ghost" type="button" data-clear-selection>Clear</button>
+          <button class="button secondary" type="button" data-select-eligible {% if selectable_count == 0 %}disabled{% endif %}>{{ icon("check") }} Select all eligible</button>
+          <button class="button ghost" type="button" data-clear-selection {% if selectable_count == 0 %}disabled{% endif %}>Clear</button>
         </div>
         <div class="selection-summary" aria-live="polite">
           <strong data-selected-count>0 selected</strong>
@@ -32,6 +33,9 @@
         </div>
         <button class="danger" type="submit" data-review-deletions>{{ icon("trash") }} Review deletions</button>
       </div>
+      {% if selectable_count == 0 %}
+        <div class="inline-status">{{ icon("clock") }} No backups are eligible for deletion yet. Retention and orphan protections are still active.</div>
+      {% endif %}
       <div class="table-wrap responsive-table backups-table">
         <table>
           <thead><tr><th class="checkbox-column"><span class="sr-only">Select</span></th><th>Backup file</th><th>Size</th><th>Age</th><th>Deletion status</th></tr></thead>
