@@ -827,8 +827,8 @@ def test_backup_retention_override_is_settings_gated(tmp_path: Path) -> None:
 
     assert "disabled" in locked.text
     assert "No backups are eligible for deletion yet." in locked.text
-    assert 'data-select-eligible disabled' in locked.text
-    assert 'data-clear-selection disabled' in locked.text
+    assert "data-select-eligible disabled" in locked.text
+    assert "data-clear-selection disabled" in locked.text
     assert 'data-retention-override="true"' in unlocked.text
     assert "Retention override selected" in confirm.text
     assert delete.status_code == 303
