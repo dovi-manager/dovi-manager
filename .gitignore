@@ -10,3 +10,4 @@ dev-media/
 .pytest_cache/
 .coverage
 htmlcov/
+AGENTS.md
