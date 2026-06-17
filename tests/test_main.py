@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from starlette.testclient import TestClient
 
-from app.config import MediaRoot, Settings
+from app.config import Settings
 from app.main import create_app
 from app.models import (
     CandidateCategory,
@@ -40,12 +40,15 @@ MUTATION_REQUESTS = (
 def make_settings(tmp_path: Path) -> Settings:
     config_dir = tmp_path / "config"
     media_root = tmp_path / "media"
+    shows_root = tmp_path / "shows"
     temp_dir = tmp_path / "cache"
     media_root.mkdir()
+    shows_root.mkdir()
     temp_dir.mkdir()
     config_dir.mkdir()
     return Settings(
         media_root=media_root,
+        shows_root=shows_root,
         temp_dir=temp_dir,
         config_dir=config_dir,
         db_path=config_dir / "dovi-manager.db",
@@ -442,22 +445,14 @@ def test_radarr_rename_scans_mapped_root(tmp_path: Path) -> None:
     assert request["relative_path"] is None
 
 
-def test_sonarr_download_maps_to_tv_root_and_rename_scans_root(
+def test_sonarr_download_maps_to_shows_root_and_rename_scans_root(
     tmp_path: Path,
 ) -> None:
     settings = make_settings(tmp_path)
-    tv_root = tmp_path / "tv"
-    tv_root.mkdir()
-    series = tv_root / "Series"
+    series = settings.shows_root / "Series"
     series.mkdir()
     episode = series / "Episode.mkv"
     episode.write_bytes(b"episode")
-    settings = Settings(
-        **{
-            **settings.__dict__,
-            "additional_media_roots": (MediaRoot("tv", "TV Shows", tv_root),),
-        }
-    )
     app = create_app(settings, start_worker=False)
 
     with TestClient(app) as client:
@@ -467,12 +462,12 @@ def test_sonarr_download_maps_to_tv_root_and_rename_scans_root(
                 "webhook_token": "secret-token",
             }
         )
-        app.state.repository.replace_webhook_mappings([("sonarr", "/sonarr-tv", "tv")])
+        app.state.repository.replace_webhook_mappings([("sonarr", "/tv", "shows")])
         download = client.post(
             "/webhooks/sonarr/secret-token",
             json={
                 "eventType": "Download",
-                "episodeFile": {"path": "/sonarr-tv/Series/Episode.mkv"},
+                "episodeFile": {"path": "/tv/Series/Episode.mkv"},
             },
         )
         request = app.state.repository.claim_next_scan_request()
@@ -481,7 +476,7 @@ def test_sonarr_download_maps_to_tv_root_and_rename_scans_root(
             "/webhooks/sonarr/secret-token",
             json={
                 "eventType": "Rename",
-                "renamedEpisodeFiles": [{"path": "/sonarr-tv/Series/Episode.mkv"}],
+                "renamedEpisodeFiles": [{"path": "/tv/Series/Episode.mkv"}],
             },
         )
         rename_request = app.state.repository.claim_next_scan_request()
@@ -489,11 +484,11 @@ def test_sonarr_download_maps_to_tv_root_and_rename_scans_root(
     assert download.status_code == 202
     assert not download.json()["fallback"]
     assert request["request_type"] == "file"
-    assert request["root_id"] == "tv"
+    assert request["root_id"] == "shows"
     assert request["relative_path"] == "Series/Episode.mkv"
     assert rename.status_code == 202
     assert rename_request["request_type"] == "smart"
-    assert rename_request["root_id"] == "tv"
+    assert rename_request["root_id"] == "shows"
 
 
 def test_optional_basic_auth_protects_ui_but_not_health(tmp_path: Path) -> None:
@@ -941,7 +936,10 @@ def test_status_summary_includes_scan_and_automation_state(tmp_path: Path) -> No
         "active_mode": None,
         "active_roots": [],
     }
-    assert body["roots"] == [{"id": "default", "label": "Movies", "inventory_count": 0}]
+    assert body["roots"] == [
+        {"id": "default", "label": "Movies", "inventory_count": 0},
+        {"id": "shows", "label": "Shows", "inventory_count": 0},
+    ]
     assert body["automation"]["pending_requests"] == 0
     assert not body["automation"]["schedule_enabled"]
     assert not body["automation"]["webhooks_enabled"]

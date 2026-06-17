@@ -12,14 +12,18 @@ def test_load_settings_uses_container_defaults() -> None:
     assert settings.temp_dir == Path("/cache")
     assert settings.config_dir == Path("/config")
     assert settings.db_path == Path("/config/dovi-manager.db")
-    assert settings.media_roots[0].id == "default"
-    assert settings.media_roots[0].label == "Movies"
+    assert [(root.id, root.label, root.path) for root in settings.media_roots] == [
+        ("default", "Movies", Path("/media2/movies")),
+        ("shows", "Shows", Path("/media2/shows")),
+    ]
 
 
 def test_load_settings_uses_environment_overrides() -> None:
     settings = load_settings(
         {
             "MEDIA_ROOT": "/library",
+            "SHOWS_ROOT": "/shows",
+            "SHOWS_ROOT_LABEL": "Series",
             "TEMP_DIR": "/work",
             "CONFIG_DIR": "/settings",
             "DB_PATH": "/database/custom.db",
@@ -27,6 +31,8 @@ def test_load_settings_uses_environment_overrides() -> None:
     )
 
     assert settings.media_root == Path("/library")
+    assert settings.shows_root == Path("/shows")
+    assert settings.shows_root_label == "Series"
     assert settings.temp_dir == Path("/work")
     assert settings.config_dir == Path("/settings")
     assert settings.db_path == Path("/database/custom.db")
@@ -83,7 +89,56 @@ def test_load_settings_parses_additional_media_roots() -> None:
 
     assert [(root.id, root.label, root.path) for root in settings.media_roots] == [
         ("default", "Films", Path("/movies")),
+        ("shows", "Shows", Path("/media2/shows")),
         ("tv", "TV Shows", Path("/media/tv")),
+    ]
+
+
+def test_load_settings_reads_extra_roots_from_config_file(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "media-roots.json").write_text(
+        (
+            '[{"id":"anime","label":"Anime","path":"/media2/anime"},'
+            '{"id":"docs","label":"Documentaries","path":"/media2/docs"}]'
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings({"CONFIG_DIR": str(config_dir)})
+
+    assert [(root.id, root.label, root.path) for root in settings.media_roots] == [
+        ("default", "Movies", Path("/media2/movies")),
+        ("shows", "Shows", Path("/media2/shows")),
+        ("anime", "Anime", Path("/media2/anime")),
+        ("docs", "Documentaries", Path("/media2/docs")),
+    ]
+
+
+def test_config_file_takes_precedence_over_legacy_env_json(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "media-roots.json").write_text(
+        '[{"id":"anime","label":"Anime","path":"/media2/anime"}]',
+        encoding="utf-8",
+    )
+
+    with pytest.warns(UserWarning, match="ADDITIONAL_MEDIA_ROOTS_JSON is ignored"):
+        settings = load_settings(
+            {
+                "CONFIG_DIR": str(config_dir),
+                "ADDITIONAL_MEDIA_ROOTS_JSON": (
+                    '[{"id":"docs","label":"Documentaries","path":"/media2/docs"}]'
+                ),
+            }
+        )
+
+    assert [root.id for root in settings.media_roots] == [
+        "default",
+        "shows",
+        "anime",
     ]
 
 
@@ -93,6 +148,7 @@ def test_load_settings_parses_additional_media_roots() -> None:
         "not-json",
         "{}",
         '[{"id":"default","label":"TV","path":"/tv"}]',
+        '[{"id":"shows","label":"Shows","path":"/shows"}]',
         '[{"id":"tv","label":"TV","path":"relative"}]',
         '[{"id":"tv","label":"TV","path":"/movies/tv"}]',
     ],
@@ -105,6 +161,32 @@ def test_additional_media_roots_are_validated(value: str) -> None:
                 "ADDITIONAL_MEDIA_ROOTS_JSON": value,
             }
         )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not-json",
+        "{}",
+        '[{"id":"default","label":"Movies","path":"/movies2"}]',
+        '[{"id":"shows","label":"Shows","path":"/shows2"}]',
+        '[{"id":"anime","label":"Anime","path":"relative"}]',
+        (
+            '[{"id":"anime","label":"Anime","path":"/media2/anime"},'
+            '{"id":"anime","label":"Anime 2","path":"/media2/anime2"}]'
+        ),
+    ],
+)
+def test_media_roots_config_file_is_validated(
+    tmp_path: Path,
+    content: str,
+) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "media-roots.json").write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_settings({"CONFIG_DIR": str(config_dir)})
 
 
 @pytest.mark.parametrize("name", ["SCAN_DEPTH", "RETENTION_DAYS", "JOB_LOG_LIMIT"])

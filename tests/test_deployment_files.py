@@ -10,6 +10,30 @@ def test_compose_uses_pullable_public_edge_image() -> None:
     assert "ghcr.io/dovi-manager/dovi-manager:edge" in compose
     assert "pull_policy: always" in compose
     assert "build:" not in compose
+    assert "${MEDIA_PATH:-./dev-media}:/media2/movies" in compose
+    assert "${SHOWS_PATH:-./dev-shows}:/media2/shows" in compose
+    assert "SHOWS_ROOT: /media2/shows" in compose
+    assert "TV_MEDIA_PATH" not in compose
+    assert "ADDITIONAL_MEDIA_ROOTS_JSON" not in compose
+
+
+def test_env_example_uses_movies_and_shows_without_root_json() -> None:
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert "MEDIA_PATH=/path/on/host/to/movies" in env_example
+    assert "SHOWS_PATH=/path/on/host/to/shows" in env_example
+    assert "SHOWS_ROOT_LABEL=Shows" in env_example
+    assert "TV_MEDIA_PATH" not in env_example
+    assert "ADDITIONAL_MEDIA_ROOTS_JSON" not in env_example
+
+
+def test_readme_documents_media_roots_config_file() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "/config/media-roots.json" in readme
+    assert '"id": "shows"' in readme
+    assert '"id": "anime"' in readme
+    assert "Legacy `ADDITIONAL_MEDIA_ROOTS_JSON` remains supported" in readme
 
 
 def test_local_compose_override_restores_build() -> None:

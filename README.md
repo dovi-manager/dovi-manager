@@ -15,7 +15,7 @@ to `cryptochrome/dovi_convert:8.2.0` and invokes that CLI directly.
 - Complex FEL files can be inspected but cannot be converted.
 - `--force` and `--delete` are never passed to `dovi_convert`.
 - Every conversion preserves the original as `.mkv.bak.dovi_convert`.
-- Files must resolve beneath `MEDIA_ROOT`, remain unchanged since scanning,
+- Files must resolve beneath a configured library root, remain unchanged since scanning,
   and remain stable for the configured window before conversion.
 - Conversion starts only after write-permission and conservative free-space
   checks pass for both media and temporary storage.
@@ -114,9 +114,10 @@ The Compose stack has no Docker socket, uses `no-new-privileges`, runs under
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DOVI_MANAGER_IMAGE` | `ghcr.io/dovi-manager/dovi-manager:edge` | Image tag or immutable rollback tag |
-| `MEDIA_ROOT` | `/media2/movies` | Container movie-library root |
+| `MEDIA_ROOT` | `/media2/movies` | Container Movies library root |
 | `MEDIA_ROOT_LABEL` | `Movies` | Display label for the backward-compatible default root |
-| `ADDITIONAL_MEDIA_ROOTS_JSON` | `[]` | Additional stable root IDs, labels, and absolute container paths |
+| `SHOWS_ROOT` | `/media2/shows` | Container Shows library root |
+| `SHOWS_ROOT_LABEL` | `Shows` | Display label for the Shows root |
 | `TEMP_DIR` | `/cache` | Fast temporary storage for conversion |
 | `CONFIG_DIR` | `/config` | Persistent application data |
 | `DB_PATH` | `/config/dovi-manager.db` | SQLite database |
@@ -146,31 +147,46 @@ Operational settings are editable in the UI and persisted in SQLite:
 - backup retention, acknowledged safe-MEL automation, and per-format automatic
   full inspection.
 
-Library paths remain environment-controlled. The default root continues to use
-`MEDIA_ROOT`; additional roots use JSON:
+Library paths remain deployment-controlled. New installs expose two stable
+library roots by default:
 
 ```json
-[{"id":"tv","label":"TV Shows","path":"/media2/tv"}]
+[
+  {"id": "default", "label": "Movies", "path": "/media2/movies"},
+  {"id": "shows", "label": "Shows", "path": "/media2/shows"}
+]
 ```
 
-Each path must also be mounted into the container. IDs must remain stable
-because candidates, inventory, jobs, and webhook requests store them. Roots
-may not overlap or use symlinks. A removed root remains in historical database
-records but is inactive until the same ID is configured again.
+`default` is the backward-compatible Movies root and `shows` is the built-in
+Shows root. IDs must remain stable because candidates, inventory, jobs, and
+webhook requests store them. Roots may not overlap or use symlinks. A removed
+root remains in historical database records but is inactive until the same ID
+is configured again.
 
-For each additional library, add one bind mount and set
-`ADDITIONAL_MEDIA_ROOTS_JSON`. For example:
+For each additional library, add one bind mount and create
+`/config/media-roots.json` with only the extra roots. For example:
 
 ```yaml
 environment:
   MEDIA_ROOT: /media2/movies
   MEDIA_ROOT_LABEL: Movies
-  ADDITIONAL_MEDIA_ROOTS_JSON: >-
-    [{"id":"tv","label":"TV Shows","path":"/media2/tv"}]
+  SHOWS_ROOT: /media2/shows
+  SHOWS_ROOT_LABEL: Shows
 volumes:
   - /srv/media/movies:/media2/movies
-  - /srv/media/tv:/media2/tv
+  - /srv/media/shows:/media2/shows
+  - /srv/media/anime:/media2/anime
 ```
+
+```json
+[
+  {"id": "anime", "label": "Anime", "path": "/media2/anime"}
+]
+```
+
+Legacy `ADDITIONAL_MEDIA_ROOTS_JSON` remains supported when
+`/config/media-roots.json` is absent, but new deployments should prefer the
+file because it is easier to read and avoids JSON quoting in `.env`.
 
 Environment variables remain the deployment defaults. Each queued job stores a
 snapshot of its effective options, so later settings changes do not alter
@@ -235,7 +251,7 @@ private network.
 ### Radarr
 
 1. Add a Radarr path mapping in Settings. Enter the movie path visible inside
-   Radarr, for example `/movies`, and select the matching dovi-manager root.
+   Radarr, for example `/movies`, and select the `Movies` root.
 2. In Radarr, add a Webhook connection using the generated Radarr URL.
 3. Enable download/import and rename events, then use Radarr's Test action.
 
@@ -247,8 +263,8 @@ longest matching prefix wins. Test events never queue work.
 
 ### Sonarr
 
-1. Add a Sonarr mapping for each TV path visible inside Sonarr, such as `/tv`,
-   and select the matching dovi-manager root.
+1. Add a Sonarr mapping for each shows path visible inside Sonarr, such as
+   `/tv`, and select the `Shows` root.
 2. In Sonarr, add a Webhook connection using the generated Sonarr URL.
 3. Enable download/import and rename events, then run Sonarr's Test action.
 
@@ -343,10 +359,11 @@ python -m venv .venv
 python -m pip install -r requirements-dev.txt
 
 $env:MEDIA_ROOT = "$PWD\dev-media"
+$env:SHOWS_ROOT = "$PWD\dev-shows"
 $env:TEMP_DIR = "$PWD\dev-cache"
 $env:CONFIG_DIR = "$PWD\config"
 
-New-Item -ItemType Directory -Force dev-media, dev-cache, config
+New-Item -ItemType Directory -Force dev-media, dev-shows, dev-cache, config
 python -m uvicorn app.main:app --reload
 ```
 

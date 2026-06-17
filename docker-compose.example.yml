@@ -11,7 +11,8 @@ services:
       TZ: "${TZ:-UTC}"
       MEDIA_ROOT: /media2/movies
       MEDIA_ROOT_LABEL: "${MEDIA_ROOT_LABEL:-Movies}"
-      ADDITIONAL_MEDIA_ROOTS_JSON: '${ADDITIONAL_MEDIA_ROOTS_JSON:-[]}'
+      SHOWS_ROOT: /media2/shows
+      SHOWS_ROOT_LABEL: "${SHOWS_ROOT_LABEL:-Shows}"
       TEMP_DIR: /cache
       CONFIG_DIR: /config
       DB_PATH: /config/dovi-manager.db
@@ -27,7 +28,7 @@ services:
       FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
     volumes:
       - "${MEDIA_PATH:-./dev-media}:/media2/movies"
-      - "${TV_MEDIA_PATH:-./dev-tv}:/media2/tv"
+      - "${SHOWS_PATH:-./dev-shows}:/media2/shows"
       - "${CACHE_PATH:-./dev-cache}:/cache"
       - "${CONFIG_PATH:-./config}:/config"
     read_only: true

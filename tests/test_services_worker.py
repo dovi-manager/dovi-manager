@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from app.config import MediaRoot, Settings
+from app.config import Settings
 from app.dovi import CommandResult
 from app.models import (
     CandidateCategory,
@@ -505,17 +505,9 @@ def test_smart_scan_processes_all_configured_roots(
     settings: Settings,
     repository: Repository,
 ) -> None:
-    tv_root = settings.media_root.parent / "tv"
-    tv_root.mkdir()
-    settings = Settings(
-        **{
-            **settings.__dict__,
-            "additional_media_roots": (MediaRoot("tv", "TV Shows", tv_root),),
-        }
-    )
     repository.sync_library_roots(settings.media_roots)
     (settings.media_root / "Movie.mkv").write_bytes(b"movie")
-    (tv_root / "Episode.mkv").write_bytes(b"episode")
+    (settings.shows_root / "Episode.mkv").write_bytes(b"episode")
     outputs = [
         "\n".join(
             [
@@ -546,10 +538,10 @@ def test_smart_scan_processes_all_configured_roots(
 
     assert repository.get_job(scan_id)["state"] == JobState.SUCCEEDED.value
     assert repository.inventory_count("default") == 1
-    assert repository.inventory_count("tv") == 1
+    assert repository.inventory_count("shows") == 1
     assert {row["root_id"] for row in repository.list_candidates()} == {
         "default",
-        "tv",
+        "shows",
     }
 
 
