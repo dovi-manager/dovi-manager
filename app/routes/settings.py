@@ -270,6 +270,6 @@ def register(app: FastAPI, ctx: AppContext) -> None:
     ) -> RedirectResponse:
         regenerate_webhook_token(ctx.repository)
         return redirect_with_message(
-            "/settings",
+            "/settings#webhooks",
             "Webhook token regenerated. Update connected applications.",
         )

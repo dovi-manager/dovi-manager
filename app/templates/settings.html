@@ -157,6 +157,10 @@
                 <div class="copy-field"><input id="radarr-webhook-url" readonly value="{{ webhook_base_url }}/webhooks/radarr/{{ webhook_token }}"><button class="secondary" type="button" data-copy-value="#radarr-webhook-url">{{ icon("copy") }} Copy</button></div>
                 <label for="sonarr-webhook-url">Sonarr webhook URL</label>
                 <div class="copy-field"><input id="sonarr-webhook-url" readonly value="{{ webhook_base_url }}/webhooks/sonarr/{{ webhook_token }}"><button class="secondary" type="button" data-copy-value="#sonarr-webhook-url">{{ icon("copy") }} Copy</button></div>
+                <div class="webhook-action-row">
+                  <button class="danger" type="submit" form="webhook-token-regenerate-form">{{ icon("lock") }} Regenerate webhook token</button>
+                  <small>Immediately invalidates both current webhook URLs.</small>
+                </div>
               </div>
             {% endif %}
           </section>
@@ -180,16 +184,9 @@
       </form>
 
       {% if runtime.webhooks_enabled and webhook_token %}
-        <section class="panel settings-section token-danger-zone">
-          <div class="settings-section-header">
-            <span class="settings-icon">{{ icon("lock") }}</span>
-            <div><h2>Webhook credential</h2><p>Regeneration immediately invalidates both current webhook URLs.</p></div>
-          </div>
-          <form action="/settings/webhook-token/regenerate" method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="danger" type="submit">{{ icon("lock") }} Regenerate webhook token</button>
-          </form>
-        </section>
+        <form id="webhook-token-regenerate-form" class="hidden" action="/settings/webhook-token/regenerate" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        </form>
       {% endif %}
 
       <section class="panel settings-section">

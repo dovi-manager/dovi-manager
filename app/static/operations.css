@@ -1721,10 +1721,6 @@ meter.storage-bar::-moz-meter-bar {
   font-size: 0.68rem;
 }
 
-.token-danger-zone {
-  border-color: rgba(255, 87, 122, 0.24);
-}
-
 .sticky-settings-save {
   display: flex;
   justify-content: flex-end;

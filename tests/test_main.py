@@ -350,6 +350,7 @@ def test_regenerating_webhook_token_invalidates_previous_url(
         )
 
     assert regenerated.status_code == 303
+    assert "#webhooks" in regenerated.headers["location"]
     assert new_token and new_token != "old-token"
     assert old_url.status_code == 401
     assert new_url.status_code == 200
@@ -1022,6 +1023,8 @@ def test_settings_generate_webhooks_button_saves_mappings_and_returns_to_section
     ]
     assert 'data-copy-value="#radarr-webhook-url"' in settings_page.text
     assert 'data-copy-value="#sonarr-webhook-url"' in settings_page.text
+    assert 'form="webhook-token-regenerate-form"' in settings_page.text
+    assert 'id="webhook-token-regenerate-form"' in settings_page.text
 
 
 def test_inspection_gate_forces_mel_auto_inspection(tmp_path: Path) -> None:
