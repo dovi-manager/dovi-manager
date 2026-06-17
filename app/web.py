@@ -76,10 +76,14 @@ def redirect_with_message(
     *,
     error: bool = False,
 ) -> RedirectResponse:
+    fragment = ""
+    if "#" in path:
+        path, fragment = path.split("#", 1)
+        fragment = f"#{fragment}"
     separator = "&" if "?" in path else "?"
     key = "error" if error else "message"
     return RedirectResponse(
-        f"{path}{separator}{key}={quote(message)}",
+        f"{path}{separator}{key}={quote(message)}{fragment}",
         status_code=303,
     )
 

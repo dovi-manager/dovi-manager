@@ -982,6 +982,48 @@ def test_operational_settings_persist_and_generate_webhook_token(
     assert repository.pending_scan_request_count() == 0
 
 
+def test_settings_generate_webhooks_button_saves_mappings_and_returns_to_section(
+    tmp_path: Path,
+) -> None:
+    app = create_app(make_settings(tmp_path), start_worker=False)
+
+    with TestClient(app) as client:
+        form_data = csrf_data(
+            app,
+            retention_days="30",
+            settings_action="enable_webhooks",
+        )
+        form_data["mapping_integration"] = ["radarr", "sonarr"]
+        form_data["mapping_prefix"] = ["/movies", "/tv"]
+        form_data["mapping_root_id"] = ["default", "shows"]
+        response = client.post(
+            "/settings",
+            data=form_data,
+            follow_redirects=False,
+        )
+        repository = app.state.repository
+        settings_page = client.get("/settings")
+
+    assert response.status_code == 303
+    assert "#webhooks" in response.headers["location"]
+    assert "Webhook%20URLs%20generated" in response.headers["location"]
+    assert repository.get_setting("webhooks_enabled", "") == "true"
+    assert repository.get_setting("webhook_token", "")
+    assert [
+        {
+            "integration": mapping["integration"],
+            "external_prefix": mapping["external_prefix"],
+            "root_id": mapping["root_id"],
+        }
+        for mapping in repository.list_webhook_mappings()
+    ] == [
+        {"integration": "radarr", "external_prefix": "/movies", "root_id": "default"},
+        {"integration": "sonarr", "external_prefix": "/tv", "root_id": "shows"},
+    ]
+    assert 'data-copy-value="#radarr-webhook-url"' in settings_page.text
+    assert 'data-copy-value="#sonarr-webhook-url"' in settings_page.text
+
+
 def test_inspection_gate_forces_mel_auto_inspection(tmp_path: Path) -> None:
     app = create_app(make_settings(tmp_path), start_worker=False)
 

@@ -97,6 +97,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         schedule_start_time: str = Form(default="03:00"),
         webhooks_enabled: str | None = Form(default=None),
         radarr_root_prefix: str = Form(default=""),
+        settings_action: str = Form(default="save"),
         mapping_integration: list[str] = Form(default=[]),
         mapping_prefix: list[str] = Form(default=[]),
         mapping_root_id: list[str] = Form(default=[]),
@@ -178,7 +179,8 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                 error=True,
             )
         enable_schedule = schedule_enabled == "yes"
-        enable_webhooks = webhooks_enabled == "yes"
+        generate_webhooks = settings_action == "enable_webhooks"
+        enable_webhooks = webhooks_enabled == "yes" or generate_webhooks
         ctx.repository.set_settings(
             {
                 "retention_days": str(retention_days),
@@ -255,6 +257,11 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         if enable_webhooks:
             ensure_webhook_token(ctx.repository)
         ctx.automation.notify()
+        if generate_webhooks:
+            return redirect_with_message(
+                "/settings#webhooks",
+                "Webhook URLs generated.",
+            )
         return redirect_with_message("/settings", "Settings saved.")
 
     @app.post("/settings/webhook-token/regenerate")

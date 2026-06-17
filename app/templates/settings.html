@@ -113,7 +113,7 @@
             {% endif %}
           </section>
 
-          <section class="panel settings-section">
+          <section id="webhooks" class="panel settings-section">
             <div class="settings-section-header">
               <span class="settings-icon">{{ icon("activity") }}</span>
               <div><h2>Inbound webhooks</h2><p>Radarr and Sonarr can request exact-file scans after import and scoped Smart Scans after rename.</p></div>
@@ -145,6 +145,12 @@
                 </div>
               </template>
             </div>
+            {% if not runtime.webhooks_enabled or not webhook_token %}
+              <div class="webhook-action-row">
+                <button class="secondary" type="submit" name="settings_action" value="enable_webhooks">{{ icon("lock") }} Enable and generate webhook URLs</button>
+                <small>Saves the current settings and creates Radarr/Sonarr URLs here.</small>
+              </div>
+            {% endif %}
             {% if runtime.webhooks_enabled and webhook_token %}
               <div class="webhook-endpoints">
                 <label for="radarr-webhook-url">Radarr webhook URL</label>

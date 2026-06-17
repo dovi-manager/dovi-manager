@@ -1695,6 +1695,19 @@ meter.storage-bar::-moz-meter-bar {
   padding-top: 0.9rem;
 }
 
+.webhook-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 0.9rem;
+}
+
+.webhook-action-row small {
+  color: var(--text-muted);
+}
+
 .copy-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
