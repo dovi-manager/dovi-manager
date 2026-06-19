@@ -38,7 +38,7 @@
           <section class="panel settings-section">
             <div class="settings-section-header">
               <span class="settings-icon">{{ icon("terminal") }}</span>
-              <div><h2>Conversion defaults</h2><p>Safe CLI options only. Output, HDR10, force, delete, backup archives, and arbitrary arguments remain unavailable.</p></div>
+              <div><h2>Conversion defaults</h2><p>Safe CLI options only. Output, HDR10, force, delete, and arbitrary arguments remain unavailable.</p></div>
             </div>
             <div class="setting-row">
               <div><span class="setting-label-line"><label for="convert_safe_mode">Legacy safe mode</label>{{ info_tip("Uses dovi_convert's slower legacy extraction path instead of its normal optimized path. Enable it when the normal extraction path fails on a file. It does not enable force, deletion, or bypass any dovi-manager safety rule.") }}</span><small>Adds <code>--safe</code> to future conversion jobs for the slower extraction path.</small></div>
@@ -47,6 +47,10 @@
             <div class="setting-row">
               <div><span class="setting-label-line"><label for="convert_verbose">Verbose conversion logs</label>{{ info_tip("Records more detail from dovi_convert to help diagnose conversions. It changes logging only and does not change the generated Profile 8.1 media.") }}</span><small>Adds <code>--verbose</code> to future conversion jobs.</small></div>
               <label class="switch"><input id="convert_verbose" type="checkbox" name="convert_verbose" value="yes" {% if runtime.convert_verbose %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable verbose conversion logs</span></label>
+            </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="create_recovery_archive_on_convert">Create recovery archive</label>{{ info_tip("Creates a compact .dovi enhancement-layer archive before conversion. It can later rebuild a Profile 7 copy from the converted MKV without retaining the full original backup.") }}</span><small>Default for manual, bulk, and automatic conversions; manual confirmations can override it.</small></div>
+              <label class="switch"><input id="create_recovery_archive_on_convert" type="checkbox" name="create_recovery_archive_on_convert" value="yes" {% if runtime.create_recovery_archive_on_convert %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Create recovery archives during conversion</span></label>
             </div>
             <div class="setting-row automation-row">
               <div><span class="setting-label-line"><label for="auto_queue_mel">Automatic safe MEL queueing</label>{{ info_tip("After a successful scan, automatically queues conversion only for newly found or changed MEL candidates. Simple FEL remains manual and Complex FEL remains blocked.") }}</span><small>Queue only newly discovered or changed MEL candidates after successful scans.</small></div>

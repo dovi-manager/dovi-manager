@@ -7,16 +7,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.backups import discover_all_backups
+from app.backups import (
+    RECOVERY_ARCHIVE_SUFFIX,
+    discover_all_backups,
+    validate_recovery_archive,
+)
 from app.config import Settings
 from app.dovi import (
     SubprocessRunner,
     convert_command,
     inspect_command,
+    recovery_backup_command,
+    recovery_restore_command,
     scan_command,
 )
 from app.models import (
     CandidateCategory,
+    FileFingerprint,
     JobKind,
     JobState,
     ScannedFile,
@@ -27,9 +34,14 @@ from app.runtime_settings import RuntimeSettings
 from app.safety import (
     BACKUP_SUFFIX,
     PathSafetyError,
+    path_from_relative,
+    recovery_backup_storage_requirement,
+    recovery_restore_storage_requirement,
     relative_media_path,
     require_conversion_storage,
     require_directory_writable,
+    require_fingerprint,
+    require_storage,
     validate_media_directory,
     validate_media_file,
 )
@@ -153,6 +165,10 @@ class JobWorker:
             await self._run_inspect(job)
         elif kind is JobKind.BACKUP_DELETE:
             await self._run_backup_delete(job)
+        elif kind is JobKind.RECOVERY_BACKUP:
+            await self._run_recovery_backup(job)
+        elif kind is JobKind.RECOVERY_RESTORE:
+            await self._run_recovery_restore(job)
 
     async def _run_command(
         self,
@@ -475,18 +491,36 @@ class JobWorker:
     async def _run_convert(self, job: Any) -> None:
         path, payload = self._job_media_path(job)
         backup_path = path.with_suffix(f".mkv{BACKUP_SUFFIX}")
+        archive_path = path.with_suffix(RECOVERY_ARCHIVE_SUFFIX)
+        create_recovery_archive = bool(payload.get("create_recovery_archive"))
         if backup_path.exists():
             raise PathSafetyError("conversion backup already exists")
+        if create_recovery_archive and archive_path.exists():
+            archive_valid, archive_reason = validate_recovery_archive(archive_path)
+            if not archive_valid:
+                raise PathSafetyError(archive_reason)
 
         reserve_bytes = self.settings.disk_reserve_gib * 1024**3
         require_directory_writable(path.parent)
         require_directory_writable(self.settings.temp_dir)
-        require_conversion_storage(
-            path,
-            self.settings.temp_dir,
-            int(payload["file_size"]),
-            reserve_bytes,
-        )
+        if create_recovery_archive:
+            require_storage(
+                recovery_restore_storage_requirement(
+                    path,
+                    self.settings.temp_dir,
+                    int(payload["file_size"]),
+                    reserve_bytes,
+                ),
+                path.parent,
+                self.settings.temp_dir,
+            )
+        else:
+            require_conversion_storage(
+                path,
+                self.settings.temp_dir,
+                int(payload["file_size"]),
+                reserve_bytes,
+            )
 
         before = path.stat()
         sleep_task = asyncio.create_task(self.sleep(self.settings.stability_seconds))
@@ -521,6 +555,7 @@ class JobWorker:
                 include_simple=bool(payload.get("include_simple")),
                 safe_mode=bool(payload.get("safe_mode")),
                 verbose=bool(payload.get("verbose")),
+                create_recovery_archive=create_recovery_archive,
             )
             result = await self._run_command(job["id"], command)
         finally:
@@ -541,6 +576,10 @@ class JobWorker:
                     "conversion reported success but the backup size does not match "
                     "the scanned original"
                 )
+            if create_recovery_archive:
+                archive_valid, archive_reason = validate_recovery_archive(archive_path)
+                if not archive_valid:
+                    raise PathSafetyError(archive_reason)
             if job["candidate_id"] is not None:
                 self.repository.deactivate_candidate(job["candidate_id"])
             self.repository.finish_job(
@@ -555,6 +594,127 @@ class JobWorker:
                 exit_code=result.exit_code,
                 error="dovi_convert conversion failed",
             )
+
+    async def _run_recovery_backup(self, job: Any) -> None:
+        path, payload = self._job_media_path(job)
+        archive_path = path.with_suffix(RECOVERY_ARCHIVE_SUFFIX)
+        if archive_path.exists():
+            raise PathSafetyError("recovery archive already exists")
+        require_directory_writable(path.parent)
+        require_directory_writable(self.settings.temp_dir)
+        reserve_bytes = self.settings.disk_reserve_gib * 1024**3
+        require_storage(
+            recovery_backup_storage_requirement(
+                path,
+                self.settings.temp_dir,
+                int(payload["file_size"]),
+                reserve_bytes,
+            ),
+            path.parent,
+            self.settings.temp_dir,
+        )
+        job_temp_dir = self.settings.temp_dir / "dovi-manager" / f"job-{job['id']}"
+        job_temp_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            result = await self._run_command(
+                job["id"],
+                recovery_backup_command(
+                    self.settings.dovi_convert_path,
+                    path,
+                    job_temp_dir,
+                ),
+            )
+        finally:
+            shutil.rmtree(job_temp_dir, ignore_errors=True)
+        if result.exit_code != 0:
+            self.repository.finish_job(
+                job["id"],
+                JobState.FAILED,
+                exit_code=result.exit_code,
+                error="dovi_convert recovery backup failed",
+            )
+            return
+        valid, reason = validate_recovery_archive(archive_path)
+        if not valid:
+            raise PathSafetyError(reason)
+        self.repository.finish_job(job["id"], JobState.SUCCEEDED, exit_code=0)
+
+    async def _run_recovery_restore(self, job: Any) -> None:
+        path, payload = self._job_media_path(job)
+        root = self.settings.media_root_by_id(str(payload.get("root_id") or "default"))
+        archive_path = path_from_relative(root.path, payload["archive_relative_path"])
+        if (
+            archive_path.suffix.lower() != RECOVERY_ARCHIVE_SUFFIX
+            or archive_path.is_symlink()
+        ):
+            raise PathSafetyError("invalid recovery archive path")
+        require_fingerprint(
+            archive_path,
+            FileFingerprint(
+                size=int(payload["archive_size"]),
+                mtime_ns=int(payload["archive_mtime_ns"]),
+            ),
+        )
+        valid, reason = validate_recovery_archive(archive_path)
+        if not valid:
+            raise PathSafetyError(reason)
+        restored_path = path.with_name(f"{path.stem}.restored.mkv")
+        if restored_path.exists():
+            raise PathSafetyError("restored output already exists")
+        require_directory_writable(path.parent)
+        require_directory_writable(self.settings.temp_dir)
+        reserve_bytes = self.settings.disk_reserve_gib * 1024**3
+        restored_estimate = int(payload["file_size"]) + int(payload["archive_size"])
+        require_storage(
+            recovery_restore_storage_requirement(
+                path,
+                self.settings.temp_dir,
+                restored_estimate,
+                reserve_bytes,
+            ),
+            path.parent,
+            self.settings.temp_dir,
+        )
+        job_temp_dir = self.settings.temp_dir / "dovi-manager" / f"job-{job['id']}"
+        job_temp_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            result = await self._run_command(
+                job["id"],
+                recovery_restore_command(
+                    self.settings.dovi_convert_path,
+                    path,
+                    job_temp_dir,
+                ),
+            )
+        finally:
+            shutil.rmtree(job_temp_dir, ignore_errors=True)
+        if result.exit_code != 0:
+            self.repository.finish_job(
+                job["id"],
+                JobState.FAILED,
+                exit_code=result.exit_code,
+                error="dovi_convert recovery restore failed",
+            )
+            return
+        if not restored_path.is_file() or restored_path.is_symlink():
+            raise PathSafetyError("restore reported success but output is missing")
+        if restored_path.stat().st_size <= 0:
+            raise PathSafetyError("restore reported success but output is empty")
+        require_fingerprint(
+            path,
+            FileFingerprint(
+                size=int(payload["file_size"]),
+                mtime_ns=int(payload["file_mtime_ns"]),
+            ),
+        )
+        require_fingerprint(
+            archive_path,
+            FileFingerprint(
+                size=int(payload["archive_size"]),
+                mtime_ns=int(payload["archive_mtime_ns"]),
+            ),
+        )
+        self.repository.finish_job(job["id"], JobState.SUCCEEDED, exit_code=0)
 
     async def _run_inspect(self, job: Any) -> None:
         path, payload = self._job_media_path(job)
@@ -619,6 +779,9 @@ class JobWorker:
                     "source_inspection_job_id": job["id"],
                     "safe_mode": bool(follow_up.get("safe_mode")),
                     "verbose": bool(follow_up.get("verbose")),
+                    "create_recovery_archive": bool(
+                        follow_up.get("create_recovery_archive")
+                    ),
                 },
                 approved_by="local:auto",
             )
@@ -655,9 +818,23 @@ class JobWorker:
                     or (retention_override and backup.counterpart_exists)
                 )
             )
+            recovery_approved = False
+            if backup is not None and requested.get("recovery_archive_path"):
+                archive_path = backup.recovery_archive_path
+                recovery_approved = bool(
+                    backup.recovery_archive_valid
+                    and archive_path is not None
+                    and archive_path.stat().st_size
+                    == int(requested["recovery_archive_size"])
+                    and archive_path.stat().st_mtime_ns
+                    == int(requested["recovery_archive_mtime_ns"])
+                )
+            elif requested.get("no_recovery_acknowledged") is True:
+                recovery_approved = True
             if (
                 backup is None
                 or not can_delete
+                or not recovery_approved
                 or backup.size != int(requested["size"])
                 or backup.mtime_ns != int(requested["mtime_ns"])
             ):

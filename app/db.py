@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def connect_database(db_path: Path) -> sqlite3.Connection:
@@ -368,6 +368,122 @@ def _migrate_to_v5(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
+def _migrate_to_v6(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE candidates_v6 (
+            id INTEGER PRIMARY KEY,
+            root_id TEXT NOT NULL DEFAULT 'default'
+                REFERENCES library_roots(id),
+            relative_path TEXT NOT NULL,
+            category TEXT NOT NULL CHECK (
+                category IN ('mel', 'simple_fel', 'complex_fel', 'scan_error')
+            ),
+            status_text TEXT NOT NULL,
+            action_text TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            file_mtime_ns INTEGER NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            scan_job_id INTEGER REFERENCES jobs_v6(id),
+            UNIQUE(root_id, relative_path)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE jobs_v6 (
+            id INTEGER PRIMARY KEY,
+            kind TEXT NOT NULL CHECK (
+                kind IN (
+                    'scan', 'convert', 'inspect', 'backup_delete',
+                    'recovery_backup', 'recovery_restore'
+                )
+            ),
+            state TEXT NOT NULL CHECK (
+                state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')
+            ),
+            candidate_id INTEGER REFERENCES candidates_v6(id),
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            command_json TEXT,
+            log_text TEXT NOT NULL DEFAULT '',
+            log_truncated INTEGER NOT NULL DEFAULT 0 CHECK (log_truncated IN (0, 1)),
+            error TEXT,
+            exit_code INTEGER,
+            approved_at TEXT,
+            approved_by TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE media_inventory_v6 (
+            root_id TEXT NOT NULL DEFAULT 'default'
+                REFERENCES library_roots(id),
+            relative_path TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            file_mtime_ns INTEGER NOT NULL,
+            category TEXT CHECK (
+                category IS NULL OR category IN (
+                    'mel', 'simple_fel', 'complex_fel', 'scan_error'
+                )
+            ),
+            status_text TEXT NOT NULL,
+            action_text TEXT NOT NULL,
+            first_scanned_at TEXT NOT NULL,
+            last_scanned_at TEXT NOT NULL,
+            scan_job_id INTEGER NOT NULL REFERENCES jobs_v6(id),
+            PRIMARY KEY(root_id, relative_path)
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO candidates_v6
+        SELECT id, root_id, relative_path, category, status_text, action_text,
+               file_size, file_mtime_ns, active, first_seen_at, last_seen_at,
+               scan_job_id
+        FROM candidates
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO jobs_v6
+        SELECT id, kind, state, candidate_id, payload_json, command_json,
+               log_text, log_truncated, error, exit_code, approved_at,
+               approved_by, created_at, started_at, finished_at
+        FROM jobs
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO media_inventory_v6
+        SELECT root_id, relative_path, file_size, file_mtime_ns, category,
+               status_text, action_text, first_scanned_at, last_scanned_at,
+               scan_job_id
+        FROM media_inventory
+        """
+    )
+    connection.execute("DROP TABLE media_inventory")
+    connection.execute("DROP TABLE jobs")
+    connection.execute("DROP TABLE candidates")
+    connection.execute("ALTER TABLE candidates_v6 RENAME TO candidates")
+    connection.execute("ALTER TABLE jobs_v6 RENAME TO jobs")
+    connection.execute("ALTER TABLE media_inventory_v6 RENAME TO media_inventory")
+    for statement in (
+        "CREATE INDEX idx_candidates_active_category ON candidates(active, category)",
+        "CREATE INDEX idx_candidates_root_active ON candidates(root_id, active)",
+        "CREATE INDEX idx_jobs_state_created ON jobs(state, created_at)",
+        "CREATE INDEX idx_jobs_candidate_state ON jobs(candidate_id, state)",
+        "CREATE INDEX idx_media_inventory_scan_job ON media_inventory(scan_job_id)",
+    ):
+        connection.execute(statement)
+
+
 def initialize_database(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -402,6 +518,11 @@ def initialize_database(db_path: Path) -> None:
                 connection.execute("PRAGMA defer_foreign_keys = ON")
                 _migrate_to_v5(connection)
                 _set_schema_version(connection, 5)
+                version = 5
+            if version < 6:
+                connection.execute("PRAGMA defer_foreign_keys = ON")
+                _migrate_to_v6(connection)
+                _set_schema_version(connection, 6)
             connection.commit()
         except Exception:
             connection.rollback()

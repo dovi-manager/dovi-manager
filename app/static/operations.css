@@ -301,6 +301,23 @@
   width: 0.8rem;
 }
 
+.candidate-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.candidate-actions form {
+  margin: 0;
+}
+
+.candidate-actions .button {
+  min-height: 34px;
+  padding: 0.4rem 0.65rem;
+}
+
 .pagination-actions {
   display: flex;
   gap: 0.5rem;

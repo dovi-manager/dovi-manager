@@ -48,6 +48,7 @@
             <dt>Debug</dt><dd>{{ "Enabled" if payload.get("debug") else "Disabled" }}</dd>
           {% endif %}
           <dt>Candidate</dt><dd>{% if job.candidate_path %}<code>{{ job.candidate_path }}</code>{% else %}Not applicable{% endif %}</dd>
+          {% if job.kind in ["recovery_backup", "recovery_restore"] %}<dt>Target</dt><dd><code>{{ payload.get("target", "Unknown") }}</code></dd>{% endif %}
           {% if job.kind in ["convert", "inspect"] %}
             <dt>Format</dt><dd>{{ (payload.get("candidate_category") or job.candidate_category or "Unknown")|replace("_", " ")|title }}</dd>
             <dt>Trigger</dt><dd>{{ payload.get("queue_origin", payload.get("trigger", "manual"))|title }}</dd>

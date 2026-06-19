@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.config import Settings
+from app.backups import RECOVERY_ARCHIVE_SUFFIX
 from app.models import CandidateCategory, FileFingerprint, JobKind, ScanMode
 from app.repository import Repository
 from app.runtime_settings import RuntimeSettings
@@ -97,6 +98,7 @@ class JobService:
         *,
         approved: bool,
         approved_by: str,
+        create_recovery_archive: bool | None = None,
     ) -> int:
         if not approved:
             raise ValueError("conversion confirmation is required")
@@ -105,6 +107,12 @@ class JobService:
         if category not in (CandidateCategory.MEL, CandidateCategory.SIMPLE_FEL):
             raise ValueError("this candidate cannot be converted")
         self._validate_candidate_file(candidate)
+        runtime = RuntimeSettings.load(self.settings, self.repository)
+        archive_enabled = (
+            runtime.create_recovery_archive_on_convert
+            if create_recovery_archive is None
+            else create_recovery_archive
+        )
         return self.repository.create_job(
             JobKind.CONVERT,
             candidate_id=candidate_id,
@@ -115,10 +123,8 @@ class JobService:
                 "queue_origin": (
                     "automatic" if approved_by == "local:auto" else "manual"
                 ),
-                **RuntimeSettings.load(
-                    self.settings,
-                    self.repository,
-                ).conversion_options(),
+                **runtime.conversion_options(),
+                "create_recovery_archive": archive_enabled,
             },
             approved_by=approved_by,
         )
@@ -128,6 +134,7 @@ class JobService:
         *,
         approved: bool,
         approved_by: str,
+        create_recovery_archive: bool | None = None,
     ) -> tuple[list[int], int]:
         if not approved:
             raise ValueError("bulk conversion confirmation is required")
@@ -140,11 +147,61 @@ class JobService:
                         candidate["id"],
                         approved=True,
                         approved_by=approved_by,
+                        create_recovery_archive=create_recovery_archive,
                     )
                 )
             except (ValueError, PathSafetyError):
                 skipped += 1
         return job_ids, skipped
+
+    def queue_recovery_backup(self, candidate_id: int) -> int:
+        candidate = self._active_candidate(candidate_id)
+        if candidate["category"] == CandidateCategory.SCAN_ERROR.value:
+            raise ValueError("scan errors cannot create recovery archives")
+        path = self._validate_candidate_file(candidate)
+        archive_path = path.with_suffix(RECOVERY_ARCHIVE_SUFFIX)
+        if archive_path.exists():
+            raise ValueError("a recovery archive already exists for this file")
+        return self.repository.create_job(
+            JobKind.RECOVERY_BACKUP,
+            candidate_id=candidate_id,
+            payload={
+                **self._candidate_payload(candidate),
+                "target": candidate["relative_path"],
+                "trigger": "manual",
+            },
+        )
+
+    def queue_recovery_restore(
+        self,
+        *,
+        root_id: str,
+        archive_relative_path: str,
+        archive_size: int,
+        archive_mtime_ns: int,
+        converted_relative_path: str,
+        converted_size: int,
+        converted_mtime_ns: int,
+        approved: bool,
+        approved_by: str,
+    ) -> int:
+        if not approved:
+            raise ValueError("restore confirmation is required")
+        return self.repository.create_job(
+            JobKind.RECOVERY_RESTORE,
+            payload={
+                "root_id": root_id,
+                "target": converted_relative_path,
+                "relative_path": converted_relative_path,
+                "file_size": converted_size,
+                "file_mtime_ns": converted_mtime_ns,
+                "archive_relative_path": archive_relative_path,
+                "archive_size": archive_size,
+                "archive_mtime_ns": archive_mtime_ns,
+                "trigger": "manual",
+            },
+            approved_by=approved_by,
+        )
 
     def queue_backup_deletion(
         self,

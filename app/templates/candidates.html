@@ -16,6 +16,11 @@
     {% endif %}
   </section>
 
+  <div class="alert alert-warning">
+    <span class="alert-icon">{{ icon("alert") }}</span>
+    <div><strong>Classification is not definitive</strong><span>Simple and Complex FEL verdicts can be wrong because the current scan detection is heuristic. Use full RPU inspection for a stronger review before conversion.</span></div>
+  </div>
+
   <nav class="category-tabs" aria-label="Candidate classifications">
     <a class="{% if not selected_category %}active{% endif %}" href="/candidates{% if search %}?q={{ search|urlencode }}{% endif %}">
       <span>All files</span><strong>{{ counts.mel + counts.simple_fel + counts.complex_fel + counts.scan_error }}</strong>
@@ -52,7 +57,7 @@
     <div class="table-wrap responsive-table">
       <table>
         <thead>
-          <tr><th>Media file</th><th>Classification</th><th>Scan result</th><th>Latest activity</th><th><span class="sr-only">Open</span></th></tr>
+          <tr><th>Media file</th><th>Classification</th><th>Scan result</th><th>Latest activity</th><th>Actions</th></tr>
         </thead>
         <tbody>
           {% for candidate in candidates %}
@@ -83,7 +88,13 @@
                   <span class="quiet-value">No jobs yet</span>
                 {% endif %}
               </td>
-              <td class="row-open"><a href="/candidates/{{ candidate.id }}" aria-label="Open {{ candidate.relative_path }}">{{ icon("chevron-right") }}</a></td>
+              <td class="candidate-actions" data-label="Actions">
+                <form action="/candidates/{{ candidate.id }}/inspect" method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="button ghost" type="submit">{{ icon("search") }} Inspect</button>
+                </form>
+                <a href="/candidates/{{ candidate.id }}" aria-label="Open {{ candidate.relative_path }}">{{ icon("chevron-right") }}</a>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

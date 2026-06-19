@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.uv-cache/
 .env
 config/
 dev-cache/
@@ -8,6 +9,7 @@ dev-media/
 *.db
 *.log
 .pytest_cache/
+.tmp/
 .coverage
 htmlcov/
 AGENTS.md

@@ -24,6 +24,12 @@
           <div><strong>Retention override selected</strong><span>{{ override_backups|length }} backup(s) are younger than the configured retention period. Their converted counterparts still exist, but deletion is earlier than policy normally allows.</span></div>
         </div>
       {% endif %}
+      {% if unrecoverable_backups %}
+        <div class="alert alert-danger">
+          <span class="alert-icon">{{ icon("alert") }}</span>
+          <div><strong>No valid compact recovery archive</strong><span>{{ unrecoverable_backups|length }} selected backup(s) have no valid matching <code>.dovi</code> archive. Deleting them removes dovi-manager's remaining recovery path.</span></div>
+        </div>
+      {% endif %}
       <div class="batch-list destructive-list">
         {% for backup in backups %}
           <div><span class="file-icon">{{ icon("file") }}</span><span><strong>{{ backup.relative_path|path_name }}</strong><small>{{ backup.root_label }} / {{ backup.relative_path|path_parent }}{% if not backup.eligible %} · retention override{% endif %}</small></span><span>{{ backup.size|human_size }}</span></div>
@@ -33,7 +39,7 @@
     <aside class="panel approval-panel danger-approval">
       <span class="eyebrow">Final confirmation</span>
       <h2>Delete original backups?</h2>
-      <p>The converted media files are not deleted, but these protected originals cannot be restored through dovi-manager.</p>
+      <p>The converted media files are not deleted. Files with a valid matching recovery archive can be rebuilt as a separate restored copy.</p>
       <form action="/backups/delete" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {% for backup in backups %}<input type="hidden" name="selected" value="{{ backup.selection_key }}">{% endfor %}
@@ -45,6 +51,12 @@
           <label class="approval-check danger-check">
             <input type="checkbox" required>
             <span><strong>I approve deleting backups before retention expires</strong><small>This override applies only to the selected recent backups shown above.</small></span>
+          </label>
+        {% endif %}
+        {% if unrecoverable_backups %}
+          <label class="approval-check danger-check">
+            <input type="checkbox" name="acknowledge_no_recovery" value="yes" required>
+            <span><strong>I accept permanent loss of recovery</strong><small>No valid compact archive exists for one or more selected originals.</small></span>
           </label>
         {% endif %}
         <div class="stacked-actions">

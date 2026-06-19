@@ -16,11 +16,13 @@ for the actual media conversion engine.
 
 - Scans one or more media roots for Dolby Vision Profile 7 MKVs.
 - Shows candidates grouped as safe MEL, Simple FEL, Complex FEL, and scan errors.
+- Exposes full frame-by-frame RPU inspection from each candidate.
 - Converts safe MEL files to Profile 8.1 manually, or automatically if enabled.
 - Keeps Simple FEL conversion manual and blocks Complex FEL conversion.
 - Runs one background job at a time with logs and status.
 - Keeps original files as `.mkv.bak.dovi_convert` backups.
-- Provides a Backups page for reviewed, confirmed deletion.
+- Creates compact `.dovi` enhancement-layer recovery archives by default.
+- Provides reviewed backup deletion and non-destructive Profile 7 restoration.
 - Supports scheduled Smart Scans and Radarr/Sonarr webhooks.
 
 Safety defaults:
@@ -29,6 +31,13 @@ Safety defaults:
 - Files must stay under configured media roots.
 - Files being written to are skipped.
 - Backup deletion always requires confirmation.
+- Deleting the only recovery source requires an additional acknowledgement.
+
+Simple and Complex FEL scan verdicts are estimates, not guarantees. The current
+detection logic can misclassify files. Full RPU inspection is more thorough, but
+important media should still be verified before full originals or recovery
+archives are removed. Upstream detection changes planned for dovi_convert 9.x
+will be integrated only after its command and output formats are released.
 
 ## Docker Image
 
@@ -97,6 +106,11 @@ conversion replaces the source file and writes a sibling backup.
 3. Review candidates before converting anything.
 4. Try one copied MEL file first.
 5. Confirm the converted file plays correctly before enabling automation.
+
+Compact recovery archives use dovi_convert 8.2's Backup & Restore feature. A
+restore keeps both the converted MKV and `.dovi` archive and writes a separate
+`.restored.mkv` file. Archive matching is filename-based, so restore only an
+archive created from that source file.
 
 Smart Scan only calls `dovi_convert` for new or changed files. Full Scan
 rescans the selected root. File Scan targets one MKV.

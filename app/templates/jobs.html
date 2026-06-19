@@ -7,7 +7,7 @@
     <div class="page-header-copy">
       <div class="eyebrow">{{ icon("jobs") }} Worker queue</div>
       <h1>Jobs and logs</h1>
-      <p>Track scans, inspections, conversions, and backup deletion jobs processed by the single worker.</p>
+      <p>Track scans, inspections, conversions, recovery operations, and backup deletion jobs processed by the single worker.</p>
     </div>
     <span class="worker-chip"><span class="status-orb {% if worker.running %}is-ready{% else %}is-warning{% endif %}"></span> Worker {{ "online" if worker.running else "offline" }}</span>
   </section>
@@ -59,7 +59,7 @@
             <tr class="{% if job.state in ['queued', 'running'] %}active-job-row{% endif %}">
               <td data-label="Job"><a class="job-id" href="/jobs/{{ job.id }}">#{{ job.id }}</a></td>
               <td data-label="Type">
-                <span class="kind-cell"><i class="job-kind-icon job-kind-{{ job.kind }}">{{ icon("scan" if job.kind == "scan" else "file" if job.kind in ["convert", "inspect"] else "trash") }}</i>{% if job.kind == "scan" %}{{ metadata.get("scan_mode", "full")|title }} scan{% else %}{{ job.kind|replace("_", " ")|title }}{% endif %}</span>
+                <span class="kind-cell"><i class="job-kind-icon job-kind-{{ job.kind }}">{{ icon("scan" if job.kind == "scan" else "file" if job.kind in ["convert", "inspect"] else "backups" if job.kind in ["recovery_backup", "recovery_restore"] else "trash") }}</i>{% if job.kind == "scan" %}{{ metadata.get("scan_mode", "full")|title }} scan{% else %}{{ job.kind|replace("_", " ")|title }}{% endif %}</span>
               </td>
               <td data-label="State"><span class="badge state-{{ job.state }}">{{ job.state }}</span></td>
               <td data-label="Target">

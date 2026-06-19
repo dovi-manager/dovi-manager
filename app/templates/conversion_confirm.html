@@ -63,6 +63,10 @@
           <div><strong>Simple FEL requires judgment</strong><span>Simple FEL is likely safe based on sampled analysis, but it is not guaranteed. Manual approval is required.</span></div>
         </div>
       {% endif %}
+      <div class="alert alert-warning">
+        <span class="alert-icon">{{ icon("alert") }}</span>
+        <div><strong>Scan verdicts are provisional</strong><span>Simple and Complex FEL detection can be wrong. Full RPU inspection is more thorough, but it is not an absolute guarantee. Verify important media before deleting recovery sources.</span></div>
+      </div>
     </section>
 
     <aside class="panel approval-panel">
@@ -74,6 +78,10 @@
         <label class="approval-check">
           <input type="checkbox" name="approved" value="yes" required>
           <span><strong>I reviewed this file</strong><small>I approve this conversion and understand that the media file will be modified.</small></span>
+        </label>
+        <label class="approval-check">
+          <input type="checkbox" name="create_recovery_archive" value="yes" {% if create_recovery_archive_default %}checked{% endif %}>
+          <span><strong>Create compact recovery archive</strong><small>Preserve the enhancement layer as a sibling <code>.dovi</code> file before conversion.</small></span>
         </label>
         <div class="stacked-actions">
           <button type="submit" {% if preflight_error %}disabled title="Resolve the preflight error first"{% endif %}>{{ icon("bolt") }} Queue conversion</button>

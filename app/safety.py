@@ -70,6 +70,64 @@ def require_conversion_storage(
     return requirement
 
 
+def recovery_backup_storage_requirement(
+    source: Path,
+    temp_dir: Path,
+    source_size: int,
+    reserve_bytes: int,
+) -> StorageRequirement:
+    combined = source.parent.stat().st_dev == temp_dir.stat().st_dev
+    if combined:
+        return StorageRequirement(
+            media_required=(source_size * 2) + reserve_bytes,
+            temp_required=0,
+            combined=True,
+        )
+    return StorageRequirement(
+        media_required=source_size + reserve_bytes,
+        temp_required=source_size + reserve_bytes,
+        combined=False,
+    )
+
+
+def recovery_restore_storage_requirement(
+    source: Path,
+    temp_dir: Path,
+    restored_estimate: int,
+    reserve_bytes: int,
+) -> StorageRequirement:
+    combined = source.parent.stat().st_dev == temp_dir.stat().st_dev
+    if combined:
+        return StorageRequirement(
+            media_required=(restored_estimate * 3) + reserve_bytes,
+            temp_required=0,
+            combined=True,
+        )
+    return StorageRequirement(
+        media_required=restored_estimate + reserve_bytes,
+        temp_required=(restored_estimate * 2) + reserve_bytes,
+        combined=False,
+    )
+
+
+def require_storage(
+    requirement: StorageRequirement, media_dir: Path, temp_dir: Path
+) -> None:
+    media_free = shutil.disk_usage(media_dir).free
+    if media_free < requirement.media_required:
+        raise PathSafetyError(
+            "insufficient free space on the media filesystem "
+            f"(need {requirement.media_required} bytes, have {media_free})"
+        )
+    if not requirement.combined:
+        temp_free = shutil.disk_usage(temp_dir).free
+        if temp_free < requirement.temp_required:
+            raise PathSafetyError(
+                "insufficient free space on the temporary filesystem "
+                f"(need {requirement.temp_required} bytes, have {temp_free})"
+            )
+
+
 def require_directory_writable(directory: Path) -> None:
     try:
         descriptor, probe = tempfile.mkstemp(

@@ -11,6 +11,7 @@ def test_runtime_settings_use_environment_defaults(settings, repository) -> None
     assert not runtime.scan_debug
     assert not runtime.convert_safe_mode
     assert not runtime.allow_backup_retention_override
+    assert runtime.create_recovery_archive_on_convert
 
 
 def test_runtime_settings_use_valid_database_overrides(settings, repository) -> None:
@@ -26,6 +27,7 @@ def test_runtime_settings_use_valid_database_overrides(settings, repository) -> 
             "webhooks_enabled": "true",
             "radarr_root_prefix": "/movies",
             "allow_backup_retention_override": "true",
+            "create_recovery_archive_on_convert": "false",
         }
     )
 
@@ -41,6 +43,7 @@ def test_runtime_settings_use_valid_database_overrides(settings, repository) -> 
     assert runtime.webhooks_enabled
     assert runtime.radarr_root_prefix == "/movies"
     assert runtime.allow_backup_retention_override
+    assert not runtime.create_recovery_archive_on_convert
 
 
 def test_invalid_stored_numbers_fall_back_to_environment(settings, repository) -> None:

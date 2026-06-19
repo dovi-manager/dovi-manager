@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Confirm recovery restore - dovi-manager{% endblock %}
+{% block page_id %}restore-confirm{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/backups">Backups</a>{{ icon("chevron-right") }}<span>Restore Profile 7 copy</span></nav>
+  <section class="page-header focused-header">
+    <div class="page-header-copy"><div class="eyebrow">{{ icon("backups") }} Recovery review</div><h1>Restore Profile 7 copy</h1><p>The converted MKV and recovery archive remain unchanged. Output is written as a new <code>.restored.mkv</code> file.</p></div>
+  </section>
+  <div class="confirmation-layout">
+    <section class="panel confirmation-main">
+      <div class="confirmation-file"><span class="file-icon large">{{ icon("file") }}</span><div><strong>{{ archive.counterpart_path.name }}</strong><span>{{ archive.root_label }} / {{ archive.relative_path|path_parent }}</span></div></div>
+      <div class="review-grid">
+        <div><small>Recovery archive</small><strong>{{ archive.relative_path|path_name }}</strong></div>
+        <div><small>Archive size</small><strong>{{ archive.size|human_size }}</strong></div>
+        {% if storage_requirement.combined %}<div><small>Shared storage needed</small><strong>{{ storage_requirement.media_required|human_size }}</strong></div>{% else %}<div><small>Media space needed</small><strong>{{ storage_requirement.media_required|human_size }}</strong></div><div><small>Temporary space needed</small><strong>{{ storage_requirement.temp_required|human_size }}</strong></div>{% endif %}
+      </div>
+      <div class="alert alert-warning"><span class="alert-icon">{{ icon("alert") }}</span><div><strong>Filename matching is not proof</strong><span>Continue only if this archive was created from the original version of this MKV. Playback verification is required before relying on the restored copy.</span></div></div>
+      {% if preflight_error %}<div class="alert alert-danger"><span class="alert-icon">{{ icon("alert") }}</span><div><strong>Storage preflight failed</strong><span>{{ preflight_error }}</span></div></div>{% else %}<div class="alert alert-success"><span class="alert-icon">{{ icon("check") }}</span><div><strong>Preflight passed</strong><span>Required directories are writable and the disk reserve is protected.</span></div></div>{% endif %}
+    </section>
+    <aside class="panel approval-panel">
+      <span class="eyebrow">Approval</span><h2>Queue restoration?</h2>
+      <form action="/backups/restore" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="selected" value="{{ archive.selection_key }}">
+        <label class="approval-check"><input type="checkbox" name="approved" value="yes" required><span><strong>I matched the source and archive</strong><small>Create a separate <code>{{ archive.restored_path.name }}</code> output.</small></span></label>
+        <div class="stacked-actions"><button type="submit" {% if preflight_error %}disabled{% endif %}>{{ icon("backups") }} Queue restore</button><a class="button secondary" href="/backups">Cancel</a></div>
+      </form>
+    </aside>
+  </div>
+{% endblock %}

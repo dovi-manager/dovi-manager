@@ -27,6 +27,10 @@
             <div><span class="file-icon">{{ icon("file") }}</span><span><strong>{{ candidate.relative_path|path_name }}</strong><small>{{ candidate.relative_path|path_parent }}</small></span><span>{{ candidate.file_size|human_size }}</span></div>
           {% endfor %}
         </div>
+        <div class="alert alert-warning">
+          <span class="alert-icon">{{ icon("alert") }}</span>
+          <div><strong>Detection has limits</strong><span>These files were classified by scan logic that may contain detection flaws. Test valuable media before removing any recovery source.</span></div>
+        </div>
       </section>
       <aside class="panel approval-panel">
         <span class="eyebrow">Batch approval</span>
@@ -37,6 +41,10 @@
           <label class="approval-check">
             <input type="checkbox" name="approved" value="yes" required>
             <span><strong>I reviewed this list</strong><small>I approve all listed safe MEL conversions.</small></span>
+          </label>
+          <label class="approval-check">
+            <input type="checkbox" name="create_recovery_archive" value="yes" {% if create_recovery_archive_default %}checked{% endif %}>
+            <span><strong>Create compact recovery archives</strong><small>Preserve each enhancement layer as a sibling <code>.dovi</code> file.</small></span>
           </label>
           <div class="stacked-actions">
             <button type="submit">{{ icon("bolt") }} Queue {{ candidates|length }} job(s)</button>

@@ -56,6 +56,7 @@ def convert_command(
     include_simple: bool,
     safe_mode: bool = False,
     verbose: bool = False,
+    create_recovery_archive: bool = False,
 ) -> list[str]:
     command = [
         executable,
@@ -71,11 +72,25 @@ def convert_command(
         command.append("--safe")
     if verbose:
         command.append("--verbose")
+    if create_recovery_archive:
+        command.append("--backup")
     return command
 
 
 def inspect_command(executable: str, file_path: Path) -> list[str]:
     return [executable, "inspect", str(file_path)]
+
+
+def recovery_backup_command(
+    executable: str, file_path: Path, temp_dir: Path
+) -> list[str]:
+    return [executable, "backup", str(file_path), "--temp", str(temp_dir)]
+
+
+def recovery_restore_command(
+    executable: str, file_path: Path, temp_dir: Path
+) -> list[str]:
+    return [executable, "restore", str(file_path), "--temp", str(temp_dir)]
 
 
 class SubprocessRunner:
@@ -96,8 +111,8 @@ class SubprocessRunner:
             "--delete",
             "--output",
             "--hdr10",
-            "--backup",
             "--candidates",
+            "--source",
         }
         if forbidden_flags.intersection(command):
             raise ValueError("unsafe dovi_convert flags are forbidden")

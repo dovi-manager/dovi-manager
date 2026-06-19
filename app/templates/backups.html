@@ -6,8 +6,8 @@
   <section class="page-header">
     <div class="page-header-copy">
       <div class="eyebrow">{{ icon("backups") }} Source protection</div>
-      <h1>Original backups</h1>
-      <p>Every converted source remains protected until you explicitly select and confirm permanent deletion.</p>
+      <h1>Backup and recovery</h1>
+      <p>Manage full original backups and compact <code>.dovi</code> enhancement-layer recovery archives.</p>
     </div>
     <a class="button secondary" href="/settings">{{ icon("settings") }} Retention settings</a>
   </section>
@@ -38,7 +38,7 @@
       {% endif %}
       <div class="table-wrap responsive-table backups-table">
         <table>
-          <thead><tr><th class="checkbox-column"><span class="sr-only">Select</span></th><th>Backup file</th><th>Size</th><th>Age</th><th>Deletion status</th></tr></thead>
+          <thead><tr><th class="checkbox-column"><span class="sr-only">Select</span></th><th>Backup file</th><th>Size</th><th>Age</th><th>Recovery</th><th>Deletion status</th></tr></thead>
           <tbody>
             {% for backup in backups %}
               <tr class="{% if not backup.eligible %}ineligible-row{% endif %}">
@@ -54,6 +54,13 @@
                 </td>
                 <td data-label="Size">{{ backup.size|human_size }}</td>
                 <td data-label="Age"><span class="age-value">{{ backup.age_days }}</span> day(s)</td>
+                <td data-label="Recovery">
+                  {% if backup.recovery_archive_valid %}
+                    <span class="status-text is-positive">{{ icon("check") }} Compact archive ready</span>
+                  {% else %}
+                    <span class="status-text is-warning">{{ icon("alert") }} No valid archive</span>
+                  {% endif %}
+                </td>
                 <td data-label="Deletion status">
                   {% if backup.eligible %}
                     <span class="status-text is-warning">{{ icon("check") }} Eligible for review</span>
@@ -78,4 +85,38 @@
       </div>
     </div>
   {% endif %}
+
+  <section class="panel inspection-history-panel">
+    <div class="section-heading compact">
+      <div><span class="eyebrow">Compact recovery</span><h2>Recovery archives</h2></div>
+      <strong>{{ recovery_archives|length }} archive(s) &middot; {{ recovery_size|human_size }}</strong>
+    </div>
+    <p class="quiet-value">A <code>.dovi</code> archive stores the enhancement layer. Filename matching cannot prove that an archive came from a particular MKV; restore only archives you created from that source.</p>
+    {% if recovery_archives %}
+      <div class="table-wrap responsive-table backups-table">
+        <table>
+          <thead><tr><th>Recovery archive</th><th>Size</th><th>Converted MKV</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for archive in recovery_archives %}
+              <tr>
+                <td data-label="Recovery archive"><span class="file-cell"><span class="file-icon">{{ icon("backups") }}</span><span><strong>{{ archive.relative_path|path_name }}</strong><small>{{ archive.root_label }} / {{ archive.relative_path|path_parent }}</small></span></span></td>
+                <td data-label="Size">{{ archive.size|human_size }}</td>
+                <td data-label="Converted MKV">{{ archive.counterpart_path.name if archive.counterpart_exists else "Missing" }}</td>
+                <td data-label="Status"><span class="status-text {% if archive.valid and archive.counterpart_exists and not archive.restored_exists %}is-positive{% else %}is-warning{% endif %}">{{ icon("check" if archive.valid and archive.counterpart_exists and not archive.restored_exists else "alert") }} {{ archive.reason }}</span></td>
+                <td data-label="Action">
+                  {% if archive.valid and archive.counterpart_exists and not archive.restored_exists %}
+                    <a class="button secondary" href="/backups/restore/confirm?archive={{ archive.selection_key|urlencode }}">Restore</a>
+                  {% else %}
+                    <span class="quiet-value">Unavailable</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state compact-empty"><div class="empty-state-content"><span class="empty-state-icon">{{ icon("backups") }}</span><h2>No recovery archives found</h2><p>Create one from a candidate or during conversion.</p></div></div>
+    {% endif %}
+  </section>
 {% endblock %}

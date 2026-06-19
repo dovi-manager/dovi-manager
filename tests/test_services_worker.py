@@ -1,7 +1,9 @@
 import asyncio
+import io
 import json
 import os
 import shutil
+import tarfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -34,12 +36,29 @@ class FakeRunner:
         if self.result.exit_code == 0 and len(command) > 2 and command[1] == "convert":
             source = Path(command[2])
             original = source.read_bytes()
+            if "--backup" in command:
+                write_recovery_archive(source.with_suffix(".dovi"))
             source.with_suffix(".mkv.bak.dovi_convert").write_bytes(original)
             source.write_bytes(b"converted")
+        elif self.result.exit_code == 0 and len(command) > 2 and command[1] == "backup":
+            write_recovery_archive(Path(command[2]).with_suffix(".dovi"))
+        elif (
+            self.result.exit_code == 0 and len(command) > 2 and command[1] == "restore"
+        ):
+            source = Path(command[2])
+            source.with_name(f"{source.stem}.restored.mkv").write_bytes(b"restored")
         return self.result
 
     async def stop(self, grace_seconds: int) -> None:
         pass
+
+
+def write_recovery_archive(path: Path) -> None:
+    payload = b"enhancement-layer"
+    with tarfile.open(path, "w") as archive:
+        member = tarfile.TarInfo("el.hevc")
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
 
 
 def add_candidate(
@@ -777,6 +796,7 @@ def test_backup_deletion_revalidates_and_records_approver(
                 "relative_path": backup.name,
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
+                "no_recovery_acknowledged": True,
             }
         ],
         approved_by="tester",
@@ -805,6 +825,7 @@ def test_backup_deletion_allows_snapshotted_retention_override(
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
                 "retention_override": True,
+                "no_recovery_acknowledged": True,
             }
         ],
         approved_by="tester",
@@ -830,6 +851,7 @@ def test_changed_backup_is_not_deleted(
                 "relative_path": backup.name,
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
+                "no_recovery_acknowledged": True,
             }
         ],
         approved_by="tester",

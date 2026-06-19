@@ -90,6 +90,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         scan_debug: str | None = Form(default=None),
         convert_safe_mode: str | None = Form(default=None),
         convert_verbose: str | None = Form(default=None),
+        create_recovery_archive_on_convert: str | None = Form(default=None),
         schedule_enabled: str | None = Form(default=None),
         schedule_interval_minutes: int | None = Form(default=None),
         schedule_interval_value: int | None = Form(default=None),
@@ -190,6 +191,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                     "true" if convert_safe_mode == "yes" else "false"
                 ),
                 "convert_verbose": ("true" if convert_verbose == "yes" else "false"),
+                "create_recovery_archive_on_convert": (
+                    "true" if create_recovery_archive_on_convert == "yes" else "false"
+                ),
                 "schedule_enabled": "true" if enable_schedule else "false",
                 "schedule_interval_value": str(schedule_interval_value),
                 "schedule_interval_unit": schedule_interval_unit,

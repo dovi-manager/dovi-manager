@@ -1,14 +1,32 @@
 from datetime import UTC, datetime
 from pathlib import Path
+import tarfile
 
 from app.config import MediaRoot
-from app.models import BackupFile
+from app.models import BackupFile, RecoveryArchive
 from app.safety import (
     BACKUP_SUFFIX,
     PathSafetyError,
     relative_media_path,
     resolve_under_root,
 )
+
+
+RECOVERY_ARCHIVE_SUFFIX = ".dovi"
+RECOVERY_ARCHIVE_MEMBER = "el.hevc"
+
+
+def validate_recovery_archive(path: Path) -> tuple[bool, str]:
+    if not path.is_file() or path.is_symlink():
+        return False, "Recovery archive is missing or not a regular file"
+    try:
+        with tarfile.open(path, "r") as archive:
+            member = archive.getmember(RECOVERY_ARCHIVE_MEMBER)
+            if not member.isfile() or member.size <= 0:
+                return False, "Recovery archive contains an empty enhancement layer"
+    except (KeyError, OSError, tarfile.TarError):
+        return False, "Recovery archive is invalid"
+    return True, "Ready to restore"
 
 
 def discover_backups(
@@ -38,6 +56,10 @@ def discover_backups(
                 counterpart_exists = True
             except PathSafetyError:
                 pass
+        recovery_archive_path = counterpart.with_suffix(RECOVERY_ARCHIVE_SUFFIX)
+        recovery_archive_valid, recovery_archive_reason = validate_recovery_archive(
+            recovery_archive_path
+        )
         eligible = counterpart_exists and age_days >= retention_days
         if not counterpart_exists:
             reason = "Protected: converted counterpart is missing"
@@ -64,6 +86,13 @@ def discover_backups(
                 reason=reason,
                 root_id=root_id,
                 root_label=root_label,
+                recovery_archive_path=(
+                    recovery_archive_path.resolve()
+                    if recovery_archive_path.exists()
+                    else None
+                ),
+                recovery_archive_valid=recovery_archive_valid,
+                recovery_archive_reason=recovery_archive_reason,
             )
         )
     return backups
@@ -87,3 +116,68 @@ def discover_all_backups(
             )
         )
     return sorted(backups, key=lambda item: (item.root_label, item.relative_path))
+
+
+def discover_recovery_archives(
+    media_root: Path,
+    *,
+    root_id: str = "default",
+    root_label: str = "Movies",
+) -> list[RecoveryArchive]:
+    archives: list[RecoveryArchive] = []
+    if not media_root.exists():
+        return archives
+
+    for path in sorted(media_root.rglob(f"*{RECOVERY_ARCHIVE_SUFFIX}")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            relative_path = relative_media_path(media_root, path)
+        except PathSafetyError:
+            continue
+        counterpart = path.with_suffix(".mkv")
+        restored = path.with_name(f"{path.stem}.restored.mkv")
+        counterpart_exists = counterpart.is_file() and not counterpart.is_symlink()
+        if counterpart_exists:
+            try:
+                resolve_under_root(media_root, counterpart)
+            except PathSafetyError:
+                counterpart_exists = False
+        valid, reason = validate_recovery_archive(path)
+        if valid and not counterpart_exists:
+            reason = "Converted MKV is missing"
+        elif valid and restored.exists():
+            reason = "Restored output already exists"
+        stat = path.stat()
+        archives.append(
+            RecoveryArchive(
+                relative_path=relative_path,
+                path=path.resolve(),
+                counterpart_path=counterpart.resolve(),
+                restored_path=restored.resolve(),
+                size=stat.st_size,
+                mtime_ns=stat.st_mtime_ns,
+                counterpart_exists=counterpart_exists,
+                restored_exists=restored.is_file() and not restored.is_symlink(),
+                valid=valid,
+                reason=reason,
+                root_id=root_id,
+                root_label=root_label,
+            )
+        )
+    return archives
+
+
+def discover_all_recovery_archives(
+    roots: tuple[MediaRoot, ...],
+) -> list[RecoveryArchive]:
+    archives: list[RecoveryArchive] = []
+    for root in roots:
+        archives.extend(
+            discover_recovery_archives(
+                root.path,
+                root_id=root.id,
+                root_label=root.label,
+            )
+        )
+    return sorted(archives, key=lambda item: (item.root_label, item.relative_path))

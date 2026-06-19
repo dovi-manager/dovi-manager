@@ -14,6 +14,8 @@ SKIPPED_DIRS = {
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".tmp",
+    ".uv-cache",
     ".venv",
     "__pycache__",
     "config",
@@ -127,7 +129,7 @@ def _iter_files(paths: Iterable[Path]) -> Iterable[Path]:
         if not path.exists():
             continue
         if path.is_file():
-            if not _is_skipped(path):
+            if path.suffix.lower() not in SKIPPED_SUFFIXES:
                 yield path
             continue
         for child in path.rglob("*"):

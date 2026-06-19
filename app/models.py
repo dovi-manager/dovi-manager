@@ -15,6 +15,8 @@ class JobKind(StrEnum):
     CONVERT = "convert"
     INSPECT = "inspect"
     BACKUP_DELETE = "backup_delete"
+    RECOVERY_BACKUP = "recovery_backup"
+    RECOVERY_RESTORE = "recovery_restore"
 
 
 class JobState(StrEnum):
@@ -71,6 +73,29 @@ class BackupFile:
     age_days: int
     counterpart_exists: bool
     eligible: bool
+    reason: str
+    root_id: str = "default"
+    root_label: str = "Movies"
+    recovery_archive_path: Path | None = None
+    recovery_archive_valid: bool = False
+    recovery_archive_reason: str = "Recovery archive is missing"
+
+    @property
+    def selection_key(self) -> str:
+        return f"{self.root_id}:{self.relative_path}"
+
+
+@dataclass(frozen=True)
+class RecoveryArchive:
+    relative_path: str
+    path: Path
+    counterpart_path: Path
+    restored_path: Path
+    size: int
+    mtime_ns: int
+    counterpart_exists: bool
+    restored_exists: bool
+    valid: bool
     reason: str
     root_id: str = "default"
     root_label: str = "Movies"

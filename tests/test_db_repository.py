@@ -43,7 +43,7 @@ def test_migrates_existing_v1_database(tmp_path: Path) -> None:
             connection.execute(
                 "SELECT value FROM app_metadata WHERE key = 'schema_version'"
             ).fetchone()["value"]
-            == "5"
+            == "6"
         )
         tables = {
             row["name"]

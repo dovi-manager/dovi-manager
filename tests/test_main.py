@@ -27,11 +27,13 @@ MUTATION_REQUESTS = (
     ("/scans/custom", {"target": "", "depth": "5"}),
     ("/scans/file", {"target": "missing.mkv"}),
     ("/candidates/1/inspect", {}),
+    ("/candidates/1/recovery-backup", {}),
     ("/candidates/1/convert", {}),
     ("/candidates/bulk-mel/convert", {}),
     ("/jobs/1/cancel", {}),
     ("/backups/confirm", {}),
     ("/backups/delete", {}),
+    ("/backups/restore", {}),
     ("/settings", {"retention_days": "30"}),
     ("/settings/webhook-token/regenerate", {}),
 )
@@ -110,7 +112,7 @@ def test_startup_initializes_database(tmp_path: Path) -> None:
             "SELECT value FROM app_metadata WHERE key = 'schema_version'"
         ).fetchone()
 
-    assert row == ("5",)
+    assert row == ("6",)
 
 
 def test_dashboard_renders_configuration(tmp_path: Path) -> None:
@@ -699,7 +701,7 @@ def test_every_post_form_contains_csrf_token() -> None:
             )
         )
 
-    assert len(forms) == 13
+    assert len(forms) == 16
     assert all('name="csrf_token"' in form for form in forms)
 
 
@@ -820,7 +822,11 @@ def test_backup_retention_override_is_settings_gated(tmp_path: Path) -> None:
         )
         delete = client.post(
             "/backups/delete",
-            data=csrf_data(app, selected=f"default:{backup.name}"),
+            data=csrf_data(
+                app,
+                selected=f"default:{backup.name}",
+                acknowledge_no_recovery="yes",
+            ),
             follow_redirects=False,
         )
         job = app.state.repository.get_job(1)

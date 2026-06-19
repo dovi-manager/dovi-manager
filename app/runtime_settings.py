@@ -41,6 +41,7 @@ class RuntimeSettings:
     scan_debug: bool
     convert_safe_mode: bool
     convert_verbose: bool
+    create_recovery_archive_on_convert: bool
     schedule_enabled: bool
     schedule_interval_value: int
     schedule_interval_unit: str
@@ -112,6 +113,11 @@ class RuntimeSettings:
                 repository,
                 "convert_verbose",
                 False,
+            ),
+            create_recovery_archive_on_convert=_stored_bool(
+                repository,
+                "create_recovery_archive_on_convert",
+                True,
             ),
             schedule_enabled=_stored_bool(
                 repository,
@@ -210,4 +216,5 @@ class RuntimeSettings:
         return {
             "safe_mode": self.convert_safe_mode,
             "verbose": self.convert_verbose,
+            "create_recovery_archive": self.create_recovery_archive_on_convert,
         }

@@ -15,6 +15,11 @@
     <span class="badge category-{{ candidate.category }}">{{ candidate.category|replace("_", " ") }}</span>
   </section>
 
+  <div class="alert alert-warning">
+    <span class="alert-icon">{{ icon("alert") }}</span>
+    <div><strong>Simple and Complex FEL are scan estimates</strong><span>The detection logic can misclassify files. Full RPU inspection checks every frame and is the stronger review path, but it is not an absolute guarantee.</span></div>
+  </div>
+
   <div class="detail-layout">
     <section class="panel detail-primary">
       <div class="section-heading compact">
@@ -52,6 +57,14 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button class="secondary" type="submit">{{ icon("search") }} Run full RPU inspection</button>
           </form>
+          {% if candidate.active and candidate.category != "scan_error" and not archive_exists %}
+            <form action="/candidates/{{ candidate.id }}/recovery-backup" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="secondary" type="submit">{{ icon("backups") }} Create recovery archive</button>
+            </form>
+          {% elif archive_exists %}
+            <span class="status-text {% if archive_valid %}is-positive{% else %}is-warning{% endif %}">{{ icon("check" if archive_valid else "alert") }} {{ "Recovery archive ready" if archive_valid else archive_reason }}</span>
+          {% endif %}
           {% if candidate.active and candidate.category in ["mel", "simple_fel"] %}
             <a class="button" href="/candidates/{{ candidate.id }}/convert">{{ icon("bolt") }} Review conversion</a>
           {% endif %}

@@ -5,13 +5,17 @@ import math
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app.backups import RECOVERY_ARCHIVE_SUFFIX, validate_recovery_archive
 from app.models import CandidateCategory, JobKind
+from app.runtime_settings import RuntimeSettings
 from app.safety import (
     PathSafetyError,
     conversion_storage_requirement,
     path_from_relative,
+    recovery_restore_storage_requirement,
     require_conversion_storage,
     require_directory_writable,
+    require_storage,
 )
 from app.web import (
     AppContext,
@@ -61,6 +65,18 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         candidate = ctx.repository.get_candidate(candidate_id)
         if candidate is None:
             return Response("Candidate not found", status_code=404)
+        archive_exists = False
+        archive_valid = False
+        archive_reason = "Recovery archive has not been created"
+        try:
+            root = ctx.settings.media_root_by_id(candidate["root_id"])
+            candidate_path = path_from_relative(root.path, candidate["relative_path"])
+            archive_path = candidate_path.with_suffix(RECOVERY_ARCHIVE_SUFFIX)
+            archive_exists = archive_path.exists()
+            if archive_exists:
+                archive_valid, archive_reason = validate_recovery_archive(archive_path)
+        except (OSError, PathSafetyError):
+            pass
         return ctx.render(
             request,
             "candidate_detail.html",
@@ -69,6 +85,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                 candidate_id,
                 JobKind.INSPECT.value,
             ),
+            archive_exists=archive_exists,
+            archive_valid=archive_valid,
+            archive_reason=archive_reason,
         )
 
     @app.post("/candidates/{candidate_id:int}/inspect")
@@ -81,6 +100,26 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             job_id = ctx.job_service.queue_inspect(candidate_id)
             ctx.worker.notify()
             return redirect_with_message(f"/jobs/{job_id}", "Inspection queued.")
+        except (ValueError, OSError) as exc:
+            return redirect_with_message(
+                f"/candidates/{candidate_id}",
+                str(exc),
+                error=True,
+            )
+
+    @app.post("/candidates/{candidate_id:int}/recovery-backup")
+    async def queue_recovery_backup(
+        request: Request,
+        candidate_id: int,
+        _: None = Depends(ctx.require_csrf),
+    ) -> RedirectResponse:
+        try:
+            job_id = ctx.job_service.queue_recovery_backup(candidate_id)
+            ctx.worker.notify()
+            return redirect_with_message(
+                f"/jobs/{job_id}",
+                "Recovery archive queued.",
+            )
         except (ValueError, OSError) as exc:
             return redirect_with_message(
                 f"/candidates/{candidate_id}",
@@ -105,25 +144,37 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         ):
             return Response("Candidate cannot be converted", status_code=400)
         reserve_bytes = ctx.settings.disk_reserve_gib * 1024**3
+        runtime = RuntimeSettings.load(ctx.settings, ctx.repository)
         requirement = None
         preflight_error = None
         try:
             root = ctx.settings.media_root_by_id(candidate["root_id"])
             path = path_from_relative(root.path, candidate["relative_path"])
-            requirement = conversion_storage_requirement(
-                path,
-                ctx.settings.temp_dir,
-                int(candidate["file_size"]),
-                reserve_bytes,
-            )
+            if runtime.create_recovery_archive_on_convert:
+                requirement = recovery_restore_storage_requirement(
+                    path,
+                    ctx.settings.temp_dir,
+                    int(candidate["file_size"]),
+                    reserve_bytes,
+                )
+            else:
+                requirement = conversion_storage_requirement(
+                    path,
+                    ctx.settings.temp_dir,
+                    int(candidate["file_size"]),
+                    reserve_bytes,
+                )
             require_directory_writable(path.parent)
             require_directory_writable(ctx.settings.temp_dir)
-            require_conversion_storage(
-                path,
-                ctx.settings.temp_dir,
-                int(candidate["file_size"]),
-                reserve_bytes,
-            )
+            if runtime.create_recovery_archive_on_convert:
+                require_storage(requirement, path.parent, ctx.settings.temp_dir)
+            else:
+                require_conversion_storage(
+                    path,
+                    ctx.settings.temp_dir,
+                    int(candidate["file_size"]),
+                    reserve_bytes,
+                )
         except (OSError, PathSafetyError) as exc:
             preflight_error = str(exc)
         return ctx.render(
@@ -132,6 +183,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             candidate=candidate,
             storage_requirement=requirement,
             preflight_error=preflight_error,
+            create_recovery_archive_default=(
+                runtime.create_recovery_archive_on_convert
+            ),
         )
 
     @app.post("/candidates/{candidate_id:int}/convert")
@@ -139,6 +193,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         request: Request,
         candidate_id: int,
         approved: str | None = Form(default=None),
+        create_recovery_archive: str | None = Form(default=None),
         _: None = Depends(ctx.require_csrf),
     ) -> RedirectResponse:
         try:
@@ -146,6 +201,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                 candidate_id,
                 approved=approved == "yes",
                 approved_by=current_actor(request),
+                create_recovery_archive=create_recovery_archive == "yes",
             )
             ctx.worker.notify()
             return redirect_with_message(f"/jobs/{job_id}", "Conversion queued.")
@@ -158,22 +214,28 @@ def register(app: FastAPI, ctx: AppContext) -> None:
 
     @app.get("/candidates/bulk-mel/confirm", response_class=HTMLResponse)
     async def bulk_mel_confirmation(request: Request) -> HTMLResponse:
+        runtime = RuntimeSettings.load(ctx.settings, ctx.repository)
         return ctx.render(
             request,
             "bulk_mel_confirm.html",
             candidates=ctx.repository.list_candidates(CandidateCategory.MEL.value),
+            create_recovery_archive_default=(
+                runtime.create_recovery_archive_on_convert
+            ),
         )
 
     @app.post("/candidates/bulk-mel/convert")
     async def queue_bulk_mel(
         request: Request,
         approved: str | None = Form(default=None),
+        create_recovery_archive: str | None = Form(default=None),
         _: None = Depends(ctx.require_csrf),
     ) -> RedirectResponse:
         try:
             job_ids, skipped = ctx.job_service.queue_bulk_mel(
                 approved=approved == "yes",
                 approved_by=current_actor(request),
+                create_recovery_archive=create_recovery_archive == "yes",
             )
             ctx.worker.notify()
             return redirect_with_message(
