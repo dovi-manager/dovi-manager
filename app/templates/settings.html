@@ -48,22 +48,6 @@
               <div><span class="setting-label-line"><label for="convert_verbose">Verbose conversion logs</label>{{ info_tip("Records more detail from dovi_convert to help diagnose conversions. It changes logging only and does not change the generated Profile 8.1 media.") }}</span><small>Adds <code>--verbose</code> to future conversion jobs.</small></div>
               <label class="switch"><input id="convert_verbose" type="checkbox" name="convert_verbose" value="yes" {% if runtime.convert_verbose %}checked{% endif %}><span aria-hidden="true"></span><span class="sr-only">Enable verbose conversion logs</span></label>
             </div>
-            <div class="setting-row">
-              <div><span class="setting-label-line"><label for="create_recovery_archive_on_convert">Create compact <code>.dovi</code> recovery</label>{{ info_tip("Creates an enhancement-layer archive during conversion. It is not a full media file and requires the converted MKV for recovery.") }}</span><small>Automatic conversions use this default; manual and bulk reviews can override it.</small></div>
-              <label class="switch"><input id="create_recovery_archive_on_convert" type="checkbox" name="create_recovery_archive_on_convert" value="yes" {% if runtime.create_recovery_archive_on_convert %}checked{% endif %} data-compact-backup-toggle><span aria-hidden="true"></span><span class="sr-only">Create recovery archives during conversion</span></label>
-            </div>
-            <div class="setting-row dependent-setting">
-              <div><span class="setting-label-line"><label for="compact_only_after_convert">Keep compact recovery only</label>{{ info_tip("After conversion and archive validation succeed, permanently removes the full .bak.dovi_convert original. dovi-manager never passes --delete to dovi_convert.") }}</span><small>Default protection mode. Disable this to keep both backup types.</small></div>
-              <label class="switch"><input id="compact_only_after_convert" type="checkbox" name="compact_only_after_convert" value="yes" {% if runtime.compact_only_after_convert %}checked{% endif %} {% if not runtime.create_recovery_archive_on_convert %}disabled{% endif %} data-compact-only-toggle data-initial="{{ 'true' if runtime.compact_only_after_convert else 'false' }}"><span aria-hidden="true"></span><span class="sr-only">Keep compact recovery only</span></label>
-            </div>
-            <div class="alert alert-warning">
-              <span class="alert-icon">{{ icon("alert") }}</span>
-              <div><strong>Compact-only mode removes full originals</strong><span>Automatic conversions will permanently remove <code>.bak.dovi_convert</code> only after the converted MKV and compact archive validate.</span></div>
-            </div>
-            <label class="approval-check compact-check" data-compact-only-ack-wrapper>
-              <input type="checkbox" name="compact_only_acknowledged" value="yes" data-compact-only-ack>
-              <span><strong>I understand compact-only storage</strong><small>Required when enabling compact-only mode after it was disabled.</small></span>
-            </label>
             <div class="setting-row automation-row">
               <div><span class="setting-label-line"><label for="auto_queue_mel">Automatic safe MEL queueing</label>{{ info_tip("After a successful scan, automatically queues conversion only for newly found or changed MEL candidates. Simple FEL remains manual and Complex FEL remains blocked.") }}</span><small>Queue only newly discovered or changed MEL candidates after successful scans.</small></div>
               <label class="switch">
@@ -192,8 +176,24 @@
           <section class="panel settings-section" id="backup-retention">
             <div class="settings-section-header">
               <span class="settings-icon">{{ icon("backups") }}</span>
-              <div><h2>Backup retention</h2><p>Controls manual deletion eligibility for full originals and compact recovery archives.</p></div>
+              <div><h2>Backup and recovery</h2><p>Choose which recovery files conversions retain and when stored backups become eligible for manual deletion.</p></div>
             </div>
+            <div class="setting-row">
+              <div><span class="setting-label-line"><label for="create_recovery_archive_on_convert">Create compact <code>.dovi</code> recovery</label>{{ info_tip("Creates an enhancement-layer archive during conversion. It is not a full media file and requires the converted MKV for recovery.") }}</span><small>Automatic conversions use this backup default; manual and bulk reviews can override it.</small></div>
+              <label class="switch"><input id="create_recovery_archive_on_convert" type="checkbox" name="create_recovery_archive_on_convert" value="yes" {% if runtime.create_recovery_archive_on_convert %}checked{% endif %} data-compact-backup-toggle><span aria-hidden="true"></span><span class="sr-only">Create recovery archives during conversion</span></label>
+            </div>
+            <div class="setting-row dependent-setting">
+              <div><span class="setting-label-line"><label for="compact_only_after_convert">Keep compact recovery only</label>{{ info_tip("After conversion and archive validation succeed, permanently removes the full .bak.dovi_convert original. dovi-manager never passes --delete to dovi_convert.") }}</span><small>Default backup mode. Disable this to keep both backup types.</small></div>
+              <label class="switch"><input id="compact_only_after_convert" type="checkbox" name="compact_only_after_convert" value="yes" {% if runtime.compact_only_after_convert %}checked{% endif %} {% if not runtime.create_recovery_archive_on_convert %}disabled{% endif %} data-compact-only-toggle data-initial="{{ 'true' if runtime.compact_only_after_convert else 'false' }}"><span aria-hidden="true"></span><span class="sr-only">Keep compact recovery only</span></label>
+            </div>
+            <div class="alert alert-warning">
+              <span class="alert-icon">{{ icon("alert") }}</span>
+              <div><strong>Compact-only mode removes full originals</strong><span>Automatic conversions will permanently remove <code>.bak.dovi_convert</code> only after the converted MKV and compact archive validate.</span></div>
+            </div>
+            <label class="approval-check compact-check" data-compact-only-ack-wrapper>
+              <input type="checkbox" name="compact_only_acknowledged" value="yes" data-compact-only-ack>
+              <span><strong>I understand compact-only storage</strong><small>Required when enabling compact-only mode after it was disabled.</small></span>
+            </label>
             <div class="setting-row">
               <div><span class="setting-label-line"><label for="retention_days">Retention period</label>{{ info_tip("A backup type cannot be selected for manual deletion until it reaches this age and its current MKV exists. Reaching this age never deletes it automatically.") }}</span><small>Choose between 1 and 3650 days. Applies to both backup types.</small></div>
               <div class="number-suffix"><input id="retention_days" type="number" name="retention_days" min="1" max="3650" value="{{ runtime.retention_days }}" required><span>days</span></div>

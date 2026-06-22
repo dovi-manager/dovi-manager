@@ -176,7 +176,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             and compact_only_acknowledged != "yes"
         ):
             return redirect_with_message(
-                "/settings#conversion-defaults",
+                "/settings#backup-retention",
                 "Acknowledge that compact-only mode removes full originals.",
                 error=True,
             )
