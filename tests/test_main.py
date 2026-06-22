@@ -141,6 +141,26 @@ def test_dashboard_renders_configuration(tmp_path: Path) -> None:
     assert "/static/operations.css?v=" in response.text
 
 
+def test_backup_controls_render_inside_backup_settings_section(tmp_path: Path) -> None:
+    app = create_app(make_settings(tmp_path), start_worker=False)
+
+    with TestClient(app) as client:
+        response = client.get("/settings")
+
+    assert response.status_code == 200
+    conversion_section = response.text.split('id="conversion-defaults"', 1)[1].split(
+        "</section>", 1
+    )[0]
+    backup_section = response.text.split('id="backup-retention"', 1)[1].split(
+        "</section>", 1
+    )[0]
+    assert "Create compact" not in conversion_section
+    assert "Keep compact recovery only" not in conversion_section
+    assert "Backup and recovery" in backup_section
+    assert "Create compact" in backup_section
+    assert "Keep compact recovery only" in backup_section
+
+
 def test_dashboard_integrates_recent_conversion_labels(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     movie = settings.media_root / "Movie.mkv"
