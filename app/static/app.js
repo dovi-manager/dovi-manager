@@ -571,6 +571,64 @@ function setupCompactBackupPolicy() {
   update();
 }
 
+function setupConversionPreflight() {
+  const form = document.querySelector("[data-conversion-preflight-form]");
+  const storage = document.querySelector("[data-conversion-storage]");
+  if (!form || !storage) return;
+
+  const radios = form.querySelectorAll('input[name="backup_mode"]');
+  const sharedRow = storage.querySelector("[data-shared-storage]");
+  const mediaRow = storage.querySelector("[data-media-storage]");
+  const tempRow = storage.querySelector("[data-temp-storage]");
+  const sharedValue = storage.querySelector("[data-shared-storage-value]");
+  const mediaValue = storage.querySelector("[data-media-storage-value]");
+  const tempValue = storage.querySelector("[data-temp-storage-value]");
+  const errorAlert = document.querySelector("[data-conversion-preflight-error]");
+  const errorMessage = document.querySelector(
+    "[data-conversion-preflight-error-message]",
+  );
+  const successAlert = document.querySelector("[data-conversion-preflight-success]");
+  const submit = form.querySelector("[data-conversion-submit]");
+
+  const update = () => {
+    const selected = form.querySelector('input[name="backup_mode"]:checked');
+    if (!selected) return;
+    const available = selected.dataset.mediaRequired !== "";
+    const combined = selected.dataset.combined === "true";
+    const error = selected.dataset.preflightError || "";
+
+    sharedRow?.classList.toggle("hidden", !available || !combined);
+    mediaRow?.classList.toggle("hidden", !available || combined);
+    tempRow?.classList.toggle("hidden", !available || combined);
+    if (sharedValue) {
+      sharedValue.textContent = available
+        ? humanSize(selected.dataset.mediaRequired)
+        : "-";
+    }
+    if (mediaValue) {
+      mediaValue.textContent = available
+        ? humanSize(selected.dataset.mediaRequired)
+        : "-";
+    }
+    if (tempValue) {
+      tempValue.textContent = available
+        ? humanSize(selected.dataset.tempRequired)
+        : "-";
+    }
+
+    errorAlert?.classList.toggle("hidden", !error);
+    successAlert?.classList.toggle("hidden", Boolean(error));
+    if (errorMessage) errorMessage.textContent = error;
+    if (submit) {
+      submit.disabled = Boolean(error);
+      submit.title = error ? "Resolve the selected mode's preflight error first" : "";
+    }
+  };
+
+  radios.forEach((radio) => radio.addEventListener("change", update));
+  update();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   formatTimes();
   document.querySelectorAll(".dismiss-alert").forEach((button) => {
@@ -594,6 +652,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupInfoTips();
   setupBackupDialogs();
   setupCompactBackupPolicy();
+  setupConversionPreflight();
   setupSettingsSections();
   pollSummary();
 });

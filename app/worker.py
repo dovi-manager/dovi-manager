@@ -35,6 +35,7 @@ from app.runtime_settings import RuntimeSettings
 from app.safety import (
     BACKUP_SUFFIX,
     PathSafetyError,
+    conversion_with_recovery_storage_requirement,
     path_from_relative,
     recovery_backup_storage_requirement,
     recovery_restore_storage_requirement,
@@ -515,7 +516,7 @@ class JobWorker:
         require_directory_writable(self.settings.temp_dir)
         if create_recovery_archive:
             require_storage(
-                recovery_restore_storage_requirement(
+                conversion_with_recovery_storage_requirement(
                     path,
                     self.settings.temp_dir,
                     int(payload["file_size"]),
