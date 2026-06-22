@@ -42,6 +42,27 @@ def conversion_storage_requirement(
     )
 
 
+def conversion_with_recovery_storage_requirement(
+    source: Path,
+    temp_dir: Path,
+    source_size: int,
+    reserve_bytes: int,
+) -> StorageRequirement:
+    """Peak free space for conversion plus a compact recovery archive."""
+    combined = source.parent.stat().st_dev == temp_dir.stat().st_dev
+    if combined:
+        return StorageRequirement(
+            media_required=(source_size * 3) + reserve_bytes,
+            temp_required=0,
+            combined=True,
+        )
+    return StorageRequirement(
+        media_required=(source_size * 2) + reserve_bytes,
+        temp_required=source_size + reserve_bytes,
+        combined=False,
+    )
+
+
 def require_conversion_storage(
     source: Path,
     temp_dir: Path,

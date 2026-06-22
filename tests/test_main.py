@@ -3,6 +3,7 @@ import base64
 import io
 import os
 import re
+import shutil
 import tarfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1272,6 +1273,77 @@ def test_simple_fel_route_requires_and_records_manual_approval(
     job = app.state.repository.list_jobs(kind=JobKind.CONVERT.value)[0]
     assert job["approved_by"] == "local"
     assert job["approved_at"] is not None
+
+
+def test_conversion_preflight_tracks_selected_backup_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = make_settings(tmp_path)
+    movie = settings.media_root / "Movie.mkv"
+    movie.write_bytes(b"x" * 100)
+    stat = movie.stat()
+    app = create_app(settings, start_worker=False)
+    free = (settings.disk_reserve_gib * 1024**3) + 250
+    monkeypatch.setattr(
+        shutil,
+        "disk_usage",
+        lambda _: shutil._ntuple_diskusage(total=free, used=0, free=free),
+    )
+
+    with TestClient(app) as client:
+        repository = app.state.repository
+        scan_id = repository.create_job(JobKind.SCAN)
+        repository.replace_candidate_snapshot(
+            [
+                ScanCandidate(
+                    relative_path=movie.name,
+                    category=CandidateCategory.MEL,
+                    status_text="safe",
+                    action_text="CONVERT",
+                    fingerprint=FileFingerprint(stat.st_size, stat.st_mtime_ns),
+                )
+            ],
+            scan_id,
+        )
+        candidate_id = repository.list_candidates()[0]["id"]
+
+        confirmation = client.get(f"/candidates/{candidate_id}/convert")
+        compact_rejected = client.post(
+            f"/candidates/{candidate_id}/convert",
+            data=csrf_data(
+                app,
+                approved="yes",
+                backup_mode="compact_only",
+            ),
+            follow_redirects=False,
+        )
+        full_accepted = client.post(
+            f"/candidates/{candidate_id}/convert",
+            data=csrf_data(
+                app,
+                approved="yes",
+                backup_mode="full_only",
+            ),
+            follow_redirects=False,
+        )
+
+    full_radio = re.search(
+        r'<input type="radio" name="backup_mode" value="full_only"[^>]+>',
+        confirmation.text,
+    )
+    compact_radio = re.search(
+        r'<input type="radio" name="backup_mode" value="compact_only"[^>]+>',
+        confirmation.text,
+    )
+    assert full_radio and 'data-preflight-error=""' in full_radio.group()
+    assert compact_radio and "insufficient free space" in compact_radio.group()
+    assert "Peak additional free space" in confirmation.text
+    assert "Peak shared free space" in confirmation.text
+    assert "error=" in compact_rejected.headers["location"]
+    assert full_accepted.status_code == 303
+    jobs = app.state.repository.list_jobs(kind=JobKind.CONVERT.value)
+    assert len(jobs) == 1
 
 
 def test_candidate_search_and_pagination(tmp_path: Path) -> None:

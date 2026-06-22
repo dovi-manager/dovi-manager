@@ -27,15 +27,13 @@
         <span class="badge category-{{ candidate.category }}">{{ candidate.category|replace("_", " ") }}</span>
       </div>
 
-      <div class="review-grid">
+      <div class="review-grid" data-conversion-storage>
         <div><small>File size</small><strong>{{ candidate.file_size|human_size }}</strong></div>
-        {% if storage_requirement and storage_requirement.combined %}
-          <div><small>Shared storage needed</small><strong>{{ storage_requirement.media_required|human_size }}</strong></div>
-        {% elif storage_requirement %}
-          <div><small>Media space needed</small><strong>{{ storage_requirement.media_required|human_size }}</strong></div>
-          <div><small>Temporary space needed</small><strong>{{ storage_requirement.temp_required|human_size }}</strong></div>
-        {% endif %}
+        <div data-shared-storage {% if not storage_requirement or not storage_requirement.combined %}class="hidden"{% endif %}><small>Peak shared free space</small><strong data-shared-storage-value>{{ storage_requirement.media_required|human_size if storage_requirement and storage_requirement.combined else "-" }}</strong></div>
+        <div data-media-storage {% if not storage_requirement or storage_requirement.combined %}class="hidden"{% endif %}><small>Peak media free space</small><strong data-media-storage-value>{{ storage_requirement.media_required|human_size if storage_requirement and not storage_requirement.combined else "-" }}</strong></div>
+        <div data-temp-storage {% if not storage_requirement or storage_requirement.combined %}class="hidden"{% endif %}><small>Peak temporary free space</small><strong data-temp-storage-value>{{ storage_requirement.temp_required|human_size if storage_requirement and not storage_requirement.combined else "-" }}</strong></div>
       </div>
+      <p class="field-help">Peak additional free space includes overlapping conversion files and the configured disk reserve. It is not the final converted file size.</p>
 
       <div class="process-flow" aria-label="Conversion safety flow">
         <span><i>{{ icon("file") }}</i><strong>Source MKV</strong><small>Profile 7</small></span>
@@ -45,17 +43,14 @@
         <span><i>{{ icon("shield") }}</i><strong>Profile 8.1</strong><small>Backup retained</small></span>
       </div>
 
-      {% if preflight_error %}
-        <div class="alert alert-danger">
+      <div class="alert alert-danger {% if not preflight_error %}hidden{% endif %}" data-conversion-preflight-error>
           <span class="alert-icon">{{ icon("alert") }}</span>
-          <div><strong>Storage preflight failed</strong><span>{{ preflight_error }}</span></div>
-        </div>
-      {% else %}
-        <div class="alert alert-success">
+          <div><strong>Storage preflight failed</strong><span data-conversion-preflight-error-message>{{ preflight_error or "" }}</span></div>
+      </div>
+      <div class="alert alert-success {% if preflight_error %}hidden{% endif %}" data-conversion-preflight-success>
           <span class="alert-icon">{{ icon("check") }}</span>
           <div><strong>Preflight passed</strong><span>Required directories are writable and the configured disk reserve is protected.</span></div>
-        </div>
-      {% endif %}
+      </div>
 
       <div class="alert alert-warning">
         <span class="alert-icon">{{ icon("alert") }}</span>
@@ -70,7 +65,7 @@
       <span class="eyebrow">Approval</span>
       <h2>Ready to queue?</h2>
       <p>This operation modifies the media file. It never uses <code>--force</code> or <code>--delete</code>. The selected backup mode controls which validated recovery files remain afterward.</p>
-      <form action="/candidates/{{ candidate.id }}/convert" method="post">
+      <form action="/candidates/{{ candidate.id }}/convert" method="post" data-conversion-preflight-form>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="approval-check">
           <input type="checkbox" name="approved" value="yes" required>
@@ -83,11 +78,13 @@
             ("both", "Full original + compact recovery", "Keep both recovery methods beside the converted MKV."),
             ("full_only", "Full original only", "Keep the complete .bak.dovi_convert source without a compact archive.")
           ] %}
-            <label class="approval-check"><input type="radio" name="backup_mode" value="{{ value }}" {% if backup_mode_default == value %}checked{% endif %} required><span><strong>{{ title }}</strong><small>{{ help }}</small></span></label>
+            {% set preflight = conversion_preflights[value] %}
+            {% set requirement = preflight.requirement %}
+            <label class="approval-check"><input type="radio" name="backup_mode" value="{{ value }}" {% if backup_mode_default == value %}checked{% endif %} required data-media-required="{{ requirement.media_required if requirement else '' }}" data-temp-required="{{ requirement.temp_required if requirement else '' }}" data-combined="{{ 'true' if requirement and requirement.combined else 'false' }}" data-preflight-error="{{ preflight.error or '' }}"><span><strong>{{ title }}</strong><small>{{ help }}{% if requirement %} Peak: {% if requirement.combined %}{{ requirement.media_required|human_size }} shared{% else %}{{ requirement.media_required|human_size }} media + {{ requirement.temp_required|human_size }} temporary{% endif %}.{% endif %}</small></span></label>
           {% endfor %}
         </fieldset>
         <div class="stacked-actions">
-          <button type="submit" {% if preflight_error %}disabled title="Resolve the preflight error first"{% endif %}>{{ icon("bolt") }} Queue conversion</button>
+          <button type="submit" data-conversion-submit>{{ icon("bolt") }} Queue conversion</button>
           <a class="button secondary" href="/candidates/{{ candidate.id }}">Cancel</a>
         </div>
       </form>
