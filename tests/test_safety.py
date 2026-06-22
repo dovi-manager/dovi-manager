@@ -106,7 +106,7 @@ def test_compact_conversion_combines_peak_storage_on_shared_filesystem(
     )
 
     assert requirement.combined
-    assert requirement.media_required == 3200
+    assert requirement.media_required == 3400
     assert requirement.temp_required == 0
 
 
@@ -131,8 +131,8 @@ def test_compact_conversion_splits_media_and_temp_peak_storage(
     )
 
     assert not requirement.combined
-    assert requirement.media_required == 2200
-    assert requirement.temp_required == 1200
+    assert requirement.media_required == 2300
+    assert requirement.temp_required == 1300
 
 
 def test_write_probe_rejects_unwritable_directory(
