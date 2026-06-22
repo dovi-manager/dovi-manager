@@ -670,9 +670,7 @@ class JobWorker:
         path = path_from_relative(
             root.path, payload["relative_path"], require_exists=False
         )
-        recovery_path = path_from_relative(
-            root.path, payload["recovery_relative_path"]
-        )
+        recovery_path = path_from_relative(root.path, payload["recovery_relative_path"])
         recovery_kind = str(payload.get("recovery_kind") or "compact")
         if recovery_kind not in {"full", "compact"}:
             raise PathSafetyError("invalid recovery type")
@@ -680,7 +678,10 @@ class JobWorker:
             raise PathSafetyError("recovery source is missing or not a regular file")
         if recovery_kind == "full" and not recovery_path.name.endswith(BACKUP_SUFFIX):
             raise PathSafetyError("invalid full original backup path")
-        if recovery_kind == "compact" and recovery_path.suffix.lower() != RECOVERY_ARCHIVE_SUFFIX:
+        if (
+            recovery_kind == "compact"
+            and recovery_path.suffix.lower() != RECOVERY_ARCHIVE_SUFFIX
+        ):
             raise PathSafetyError("invalid compact recovery path")
         require_fingerprint(
             recovery_path,
@@ -745,7 +746,10 @@ class JobWorker:
             raise PathSafetyError("restored output already exists")
         require_directory_writable(path.parent)
         reserve_bytes = self.settings.disk_reserve_gib * 1024**3
-        if shutil.disk_usage(path.parent).free < int(payload["recovery_size"]) + reserve_bytes:
+        if (
+            shutil.disk_usage(path.parent).free
+            < int(payload["recovery_size"]) + reserve_bytes
+        ):
             raise PathSafetyError("insufficient free space for recovery")
 
         if recovery_kind == "compact":
