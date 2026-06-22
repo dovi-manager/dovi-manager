@@ -1046,6 +1046,158 @@
   border-color: rgba(255, 113, 136, 0.4);
 }
 
+.backup-type-guide {
+  margin-bottom: 1rem;
+}
+
+.backup-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.8rem;
+}
+
+.backup-type-grid article {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.018);
+  padding: 0.9rem;
+}
+
+.backup-type-grid article > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.backup-type-grid h3,
+.backup-type-grid p {
+  margin: 0;
+}
+
+.backup-type-grid h3 {
+  font-size: 0.9rem;
+}
+
+.backup-type-grid code {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.backup-type-grid p,
+.backup-type-grid small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+.backup-list-heading {
+  margin-top: 1.25rem;
+}
+
+.backup-labels,
+.backup-action-groups {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.backup-label {
+  display: grid;
+  gap: 0.15rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+}
+
+.backup-label-full {
+  border-color: rgba(84, 214, 255, 0.24);
+  background: var(--cyan-soft);
+}
+
+.backup-label-compact {
+  border-color: rgba(157, 123, 255, 0.25);
+  background: var(--accent-soft);
+}
+
+.backup-label strong {
+  font-size: 0.72rem;
+}
+
+.backup-label small {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+.backup-dialog {
+  width: min(620px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.backup-dialog::backdrop {
+  background: rgba(2, 5, 12, 0.78);
+  backdrop-filter: blur(4px);
+}
+
+.dialog-close-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.backup-action-groups {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.backup-action-groups section {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.55rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.9rem;
+}
+
+.backup-action-groups h3,
+.backup-action-groups p {
+  margin: 0;
+}
+
+.backup-action-groups p {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.button.disabled,
+.button[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.backup-mode-options {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.backup-mode-options legend {
+  margin-bottom: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .backup-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

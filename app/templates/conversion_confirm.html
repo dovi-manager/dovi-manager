@@ -57,32 +57,35 @@
         </div>
       {% endif %}
 
-      {% if candidate.category == "simple_fel" %}
-        <div class="alert alert-warning">
-          <span class="alert-icon">{{ icon("alert") }}</span>
-          <div><strong>Simple FEL requires judgment</strong><span>Simple FEL is likely safe based on sampled analysis, but it is not guaranteed. Manual approval is required.</span></div>
-        </div>
-      {% endif %}
       <div class="alert alert-warning">
         <span class="alert-icon">{{ icon("alert") }}</span>
-        <div><strong>Scan verdicts are provisional</strong><span>Simple and Complex FEL detection can be wrong. Full RPU inspection is more thorough, but it is not an absolute guarantee. Verify important media before deleting recovery sources.</span></div>
+        <div>
+          <strong>Verify the converted file before deleting the full original</strong>
+          <span>Classification and conversion are not guaranteed to be correct for every file. Test video, audio, and Dolby Vision playback first.{% if candidate.category == "simple_fel" %} Simple FEL also requires this manual approval because its conversion is less certain.{% endif %}</span>
+        </div>
       </div>
     </section>
 
     <aside class="panel approval-panel">
       <span class="eyebrow">Approval</span>
       <h2>Ready to queue?</h2>
-      <p>This operation modifies the media file. It never uses <code>--force</code> or <code>--delete</code>, and it preserves the original backup.</p>
+      <p>This operation modifies the media file. It never uses <code>--force</code> or <code>--delete</code>. The selected backup mode controls which validated recovery files remain afterward.</p>
       <form action="/candidates/{{ candidate.id }}/convert" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="approval-check">
           <input type="checkbox" name="approved" value="yes" required>
           <span><strong>I reviewed this file</strong><small>I approve this conversion and understand that the media file will be modified.</small></span>
         </label>
-        <label class="approval-check">
-          <input type="checkbox" name="create_recovery_archive" value="yes" {% if create_recovery_archive_default %}checked{% endif %}>
-          <span><strong>Create compact recovery archive</strong><small>Preserve the enhancement layer as a sibling <code>.dovi</code> file before conversion.</small></span>
-        </label>
+        <fieldset class="backup-mode-options">
+          <legend>Backup protection</legend>
+          {% for value, title, help in [
+            ("compact_only", "Compact recovery only", "Create Movie.dovi, then remove the full original after validation."),
+            ("both", "Full original + compact recovery", "Keep both recovery methods beside the converted MKV."),
+            ("full_only", "Full original only", "Keep the complete .bak.dovi_convert source without a compact archive.")
+          ] %}
+            <label class="approval-check"><input type="radio" name="backup_mode" value="{{ value }}" {% if backup_mode_default == value %}checked{% endif %} required><span><strong>{{ title }}</strong><small>{{ help }}</small></span></label>
+          {% endfor %}
+        </fieldset>
         <div class="stacked-actions">
           <button type="submit" {% if preflight_error %}disabled title="Resolve the preflight error first"{% endif %}>{{ icon("bolt") }} Queue conversion</button>
           <a class="button secondary" href="/candidates/{{ candidate.id }}">Cancel</a>

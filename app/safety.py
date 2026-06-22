@@ -198,8 +198,17 @@ def relative_media_path(media_root: Path, candidate: Path) -> str:
     )
 
 
-def path_from_relative(media_root: Path, relative_path: str) -> Path:
+def path_from_relative(
+    media_root: Path,
+    relative_path: str,
+    *,
+    require_exists: bool = True,
+) -> Path:
     path = Path(relative_path)
     if path.is_absolute():
         raise PathSafetyError("absolute paths are not accepted")
-    return resolve_under_root(media_root, media_root / path)
+    return resolve_under_root(
+        media_root,
+        media_root / path,
+        require_exists=require_exists,
+    )

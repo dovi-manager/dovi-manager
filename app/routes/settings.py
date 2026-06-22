@@ -91,6 +91,8 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         convert_safe_mode: str | None = Form(default=None),
         convert_verbose: str | None = Form(default=None),
         create_recovery_archive_on_convert: str | None = Form(default=None),
+        compact_only_after_convert: str | None = Form(default=None),
+        compact_only_acknowledged: str | None = Form(default=None),
         schedule_enabled: str | None = Form(default=None),
         schedule_interval_minutes: int | None = Form(default=None),
         schedule_interval_value: int | None = Form(default=None),
@@ -166,6 +168,18 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             )
         normalized_schedule_start = f"{schedule_hour:02d}:{schedule_minute:02d}"
         enable_automation = auto_queue_mel == "yes"
+        enable_compact = create_recovery_archive_on_convert == "yes"
+        enable_compact_only = enable_compact and compact_only_after_convert == "yes"
+        if (
+            enable_compact_only
+            and not current.compact_only_after_convert
+            and compact_only_acknowledged != "yes"
+        ):
+            return redirect_with_message(
+                "/settings#conversion-defaults",
+                "Acknowledge that compact-only mode removes full originals.",
+                error=True,
+            )
         require_mel_inspection = (
             enable_automation and auto_convert_mel_after_inspect == "yes"
         )
@@ -192,7 +206,10 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                 ),
                 "convert_verbose": ("true" if convert_verbose == "yes" else "false"),
                 "create_recovery_archive_on_convert": (
-                    "true" if create_recovery_archive_on_convert == "yes" else "false"
+                    "true" if enable_compact else "false"
+                ),
+                "compact_only_after_convert": (
+                    "true" if enable_compact_only else "false"
                 ),
                 "schedule_enabled": "true" if enable_schedule else "false",
                 "schedule_interval_value": str(schedule_interval_value),

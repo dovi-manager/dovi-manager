@@ -27,6 +27,17 @@ class JobState(StrEnum):
     CANCELLED = "cancelled"
 
 
+class BackupKind(StrEnum):
+    FULL = "full"
+    COMPACT = "compact"
+
+
+class BackupMode(StrEnum):
+    FULL_ONLY = "full_only"
+    BOTH = "both"
+    COMPACT_ONLY = "compact_only"
+
+
 ACTIVE_JOB_STATES = (JobState.QUEUED.value, JobState.RUNNING.value)
 
 
@@ -97,9 +108,33 @@ class RecoveryArchive:
     restored_exists: bool
     valid: bool
     reason: str
+    age_days: int = 0
+    eligible: bool = False
+    deletion_reason: str = "Protected"
     root_id: str = "default"
     root_label: str = "Movies"
 
     @property
     def selection_key(self) -> str:
         return f"{self.root_id}:{self.relative_path}"
+
+
+@dataclass(frozen=True)
+class BackupSet:
+    relative_path: str
+    counterpart_path: Path
+    counterpart_exists: bool
+    root_id: str = "default"
+    root_label: str = "Movies"
+    full: BackupFile | None = None
+    compact: RecoveryArchive | None = None
+
+    @property
+    def selection_key(self) -> str:
+        return f"{self.root_id}:{self.relative_path}"
+
+    @property
+    def total_size(self) -> int:
+        return (self.full.size if self.full else 0) + (
+            self.compact.size if self.compact else 0
+        )

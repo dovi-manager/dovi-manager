@@ -4,10 +4,12 @@ from pathlib import Path
 import tarfile
 
 from app.backups import (
+    discover_backup_sets,
     discover_backups,
     discover_recovery_archives,
     validate_recovery_archive,
 )
+from app.config import MediaRoot
 
 
 def write_recovery_archive(path: Path, payload: bytes = b"enhancement-layer") -> None:
@@ -89,3 +91,29 @@ def test_invalid_and_empty_recovery_archives_are_rejected(tmp_path: Path) -> Non
         False,
         "Recovery archive contains an empty enhancement layer",
     )
+
+
+def test_full_and_compact_artifacts_group_into_one_movie(tmp_path: Path) -> None:
+    root = tmp_path / "media"
+    root.mkdir()
+    now = datetime(2026, 6, 7, tzinfo=UTC)
+    (root / "Movie.mkv").write_bytes(b"converted")
+    full = root / "Movie.mkv.bak.dovi_convert"
+    full.write_bytes(b"original")
+    compact = root / "Movie.dovi"
+    write_recovery_archive(compact)
+    set_age(full, 40, now)
+    set_age(compact, 40, now)
+
+    grouped = discover_backup_sets(
+        (MediaRoot("default", "Movies", root),),
+        30,
+        now=now,
+    )
+
+    assert len(grouped) == 1
+    assert grouped[0].relative_path == "Movie.mkv"
+    assert grouped[0].full is not None
+    assert grouped[0].compact is not None
+    assert grouped[0].full.eligible
+    assert grouped[0].compact.eligible

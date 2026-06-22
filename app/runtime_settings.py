@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import re
 
 from app.config import Settings
+from app.models import BackupMode
 from app.repository import Repository
 
 SCHEDULE_UNIT_MINUTES = {
@@ -42,6 +43,7 @@ class RuntimeSettings:
     convert_safe_mode: bool
     convert_verbose: bool
     create_recovery_archive_on_convert: bool
+    compact_only_after_convert: bool
     schedule_enabled: bool
     schedule_interval_value: int
     schedule_interval_unit: str
@@ -117,6 +119,11 @@ class RuntimeSettings:
             create_recovery_archive_on_convert=_stored_bool(
                 repository,
                 "create_recovery_archive_on_convert",
+                True,
+            ),
+            compact_only_after_convert=_stored_bool(
+                repository,
+                "compact_only_after_convert",
                 True,
             ),
             schedule_enabled=_stored_bool(
@@ -212,9 +219,18 @@ class RuntimeSettings:
             "debug": self.scan_debug if debug is None else debug,
         }
 
-    def conversion_options(self) -> dict[str, bool]:
+    @property
+    def backup_mode(self) -> BackupMode:
+        if not self.create_recovery_archive_on_convert:
+            return BackupMode.FULL_ONLY
+        if self.compact_only_after_convert:
+            return BackupMode.COMPACT_ONLY
+        return BackupMode.BOTH
+
+    def conversion_options(self) -> dict[str, bool | str]:
         return {
             "safe_mode": self.convert_safe_mode,
             "verbose": self.convert_verbose,
             "create_recovery_archive": self.create_recovery_archive_on_convert,
+            "backup_mode": self.backup_mode.value,
         }

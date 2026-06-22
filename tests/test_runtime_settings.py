@@ -1,3 +1,4 @@
+from app.models import BackupMode
 from app.runtime_settings import RuntimeSettings
 
 
@@ -12,6 +13,8 @@ def test_runtime_settings_use_environment_defaults(settings, repository) -> None
     assert not runtime.convert_safe_mode
     assert not runtime.allow_backup_retention_override
     assert runtime.create_recovery_archive_on_convert
+    assert runtime.compact_only_after_convert
+    assert runtime.backup_mode is BackupMode.COMPACT_ONLY
 
 
 def test_runtime_settings_use_valid_database_overrides(settings, repository) -> None:
@@ -44,6 +47,7 @@ def test_runtime_settings_use_valid_database_overrides(settings, repository) -> 
     assert runtime.radarr_root_prefix == "/movies"
     assert runtime.allow_backup_retention_override
     assert not runtime.create_recovery_archive_on_convert
+    assert runtime.backup_mode is BackupMode.FULL_ONLY
 
 
 def test_invalid_stored_numbers_fall_back_to_environment(settings, repository) -> None:

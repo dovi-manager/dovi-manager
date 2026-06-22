@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.config import Settings
 from app.backups import RECOVERY_ARCHIVE_SUFFIX
-from app.models import CandidateCategory, FileFingerprint, JobKind, ScanMode
+from app.models import BackupMode, CandidateCategory, FileFingerprint, JobKind, ScanMode
 from app.repository import Repository
 from app.runtime_settings import RuntimeSettings
 from app.safety import (
@@ -98,6 +98,7 @@ class JobService:
         *,
         approved: bool,
         approved_by: str,
+        backup_mode: str | None = None,
         create_recovery_archive: bool | None = None,
     ) -> int:
         if not approved:
@@ -108,11 +109,19 @@ class JobService:
             raise ValueError("this candidate cannot be converted")
         self._validate_candidate_file(candidate)
         runtime = RuntimeSettings.load(self.settings, self.repository)
-        archive_enabled = (
-            runtime.create_recovery_archive_on_convert
-            if create_recovery_archive is None
-            else create_recovery_archive
-        )
+        if backup_mode is not None:
+            try:
+                effective_mode = BackupMode(backup_mode)
+            except ValueError as exc:
+                raise ValueError("invalid backup mode") from exc
+        elif create_recovery_archive is not None:
+            effective_mode = (
+                BackupMode.BOTH
+                if create_recovery_archive
+                else BackupMode.FULL_ONLY
+            )
+        else:
+            effective_mode = runtime.backup_mode
         return self.repository.create_job(
             JobKind.CONVERT,
             candidate_id=candidate_id,
@@ -124,7 +133,8 @@ class JobService:
                     "automatic" if approved_by == "local:auto" else "manual"
                 ),
                 **runtime.conversion_options(),
-                "create_recovery_archive": archive_enabled,
+                "create_recovery_archive": effective_mode is not BackupMode.FULL_ONLY,
+                "backup_mode": effective_mode.value,
             },
             approved_by=approved_by,
         )
@@ -134,6 +144,7 @@ class JobService:
         *,
         approved: bool,
         approved_by: str,
+        backup_mode: str | None = None,
         create_recovery_archive: bool | None = None,
     ) -> tuple[list[int], int]:
         if not approved:
@@ -147,6 +158,7 @@ class JobService:
                         candidate["id"],
                         approved=True,
                         approved_by=approved_by,
+                        backup_mode=backup_mode,
                         create_recovery_archive=create_recovery_archive,
                     )
                 )
@@ -176,17 +188,23 @@ class JobService:
         self,
         *,
         root_id: str,
-        archive_relative_path: str,
-        archive_size: int,
-        archive_mtime_ns: int,
         converted_relative_path: str,
-        converted_size: int,
-        converted_mtime_ns: int,
+        converted_size: int | None,
+        converted_mtime_ns: int | None,
+        recovery_kind: str,
+        recovery_relative_path: str,
+        recovery_size: int,
+        recovery_mtime_ns: int,
+        compact_relative_path: str | None,
+        compact_size: int | None,
+        compact_mtime_ns: int | None,
         approved: bool,
         approved_by: str,
     ) -> int:
         if not approved:
             raise ValueError("restore confirmation is required")
+        if recovery_kind not in {"full", "compact"}:
+            raise ValueError("invalid recovery type")
         return self.repository.create_job(
             JobKind.RECOVERY_RESTORE,
             payload={
@@ -195,9 +213,13 @@ class JobService:
                 "relative_path": converted_relative_path,
                 "file_size": converted_size,
                 "file_mtime_ns": converted_mtime_ns,
-                "archive_relative_path": archive_relative_path,
-                "archive_size": archive_size,
-                "archive_mtime_ns": archive_mtime_ns,
+                "recovery_kind": recovery_kind,
+                "recovery_relative_path": recovery_relative_path,
+                "recovery_size": recovery_size,
+                "recovery_mtime_ns": recovery_mtime_ns,
+                "compact_relative_path": compact_relative_path,
+                "compact_size": compact_size,
+                "compact_mtime_ns": compact_mtime_ns,
                 "trigger": "manual",
             },
             approved_by=approved_by,

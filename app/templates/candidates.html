@@ -16,11 +16,6 @@
     {% endif %}
   </section>
 
-  <div class="alert alert-warning">
-    <span class="alert-icon">{{ icon("alert") }}</span>
-    <div><strong>Classification is not definitive</strong><span>Simple and Complex FEL verdicts can be wrong because the current scan detection is heuristic. Use full RPU inspection for a stronger review before conversion.</span></div>
-  </div>
-
   <nav class="category-tabs" aria-label="Candidate classifications">
     <a class="{% if not selected_category %}active{% endif %}" href="/candidates{% if search %}?q={{ search|urlencode }}{% endif %}">
       <span>All files</span><strong>{{ counts.mel + counts.simple_fel + counts.complex_fel + counts.scan_error }}</strong>

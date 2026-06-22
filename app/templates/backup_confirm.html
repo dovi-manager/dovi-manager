@@ -1,68 +1,22 @@
 {% extends "base.html" %}
 {% from "macros/icons.html" import icon %}
 {% block title %}Confirm backup deletion - dovi-manager{% endblock %}
-{% block page_id %}backup-confirm{% endblock %}
 {% block content %}
-  <nav class="breadcrumbs" aria-label="Breadcrumb">
-    <a href="/backups">Backups</a>{{ icon("chevron-right") }}<span>Permanent deletion</span>
-  </nav>
-  <section class="destructive-hero">
-    <span class="destructive-icon">{{ icon("trash") }}</span>
-    <div>
-      <div class="eyebrow">Irreversible action</div>
-      <h1>Confirm backup deletion</h1>
-      <p>This permanently deletes {{ backups|length }} original source backup(s), totaling {{ total_size|human_size }}. This cannot be undone by dovi-manager.</p>
-    </div>
-  </section>
-
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/backups">Backups</a>{{ icon("chevron-right") }}<span>Permanent deletion</span></nav>
+  <section class="page-header focused-header"><div class="page-header-copy"><div class="eyebrow">{{ icon("trash") }} Destructive action</div><h1>Delete {{ deletion_kind|replace("_", " ") }} backup{% if artifacts|length > 1 %}s{% endif %}</h1><p>{{ backup_set.relative_path|path_name }} · {{ total_size|human_size }}</p></div></section>
   <div class="confirmation-layout">
     <section class="panel confirmation-main">
-      <div class="section-heading compact"><div><span class="eyebrow">Deletion manifest</span><h2>Files that will be removed</h2></div><strong>{{ total_size|human_size }}</strong></div>
-      {% if override_backups %}
-        <div class="alert alert-warning">
-          <span class="alert-icon">{{ icon("alert") }}</span>
-          <div><strong>Retention override selected</strong><span>{{ override_backups|length }} backup(s) are younger than the configured retention period. Their converted counterparts still exist, but deletion is earlier than policy normally allows.</span></div>
-        </div>
-      {% endif %}
-      {% if unrecoverable_backups %}
-        <div class="alert alert-danger">
-          <span class="alert-icon">{{ icon("alert") }}</span>
-          <div><strong>No valid compact recovery archive</strong><span>{{ unrecoverable_backups|length }} selected backup(s) have no valid matching <code>.dovi</code> archive. Deleting them removes dovi-manager's remaining recovery path.</span></div>
-        </div>
-      {% endif %}
-      <div class="batch-list destructive-list">
-        {% for backup in backups %}
-          <div><span class="file-icon">{{ icon("file") }}</span><span><strong>{{ backup.relative_path|path_name }}</strong><small>{{ backup.root_label }} / {{ backup.relative_path|path_parent }}{% if not backup.eligible %} · retention override{% endif %}</small></span><span>{{ backup.size|human_size }}</span></div>
-        {% endfor %}
-      </div>
+      <div class="destructive-list">{% for artifact in artifacts %}<div><span class="file-icon">{{ icon("file") }}</span><span><strong>{{ artifact.relative_path|path_name }}</strong><small>{{ artifact.size|human_size }}</small></span></div>{% endfor %}</div>
+      {% if retention_override %}<div class="alert alert-warning"><span class="alert-icon">{{ icon("alert") }}</span><div><strong>Retention override</strong><span>At least one selected backup is younger than the configured retention period.</span></div></div>{% endif %}
+      {% if removes_last %}<div class="alert alert-danger"><span class="alert-icon">{{ icon("alert") }}</span><div><strong>No recovery source will remain</strong><span>The current MKV is not deleted, but dovi-manager will have no stored way to recover Profile 7.</span></div></div>{% endif %}
     </section>
     <aside class="panel approval-panel danger-approval">
-      <span class="eyebrow">Final confirmation</span>
-      <h2>Delete original backups?</h2>
-      <p>The converted media files are not deleted. Files with a valid matching recovery archive can be rebuilt as a separate restored copy.</p>
+      <span class="eyebrow">Final approval</span><h2>Delete permanently?</h2>
       <form action="/backups/delete" method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        {% for backup in backups %}<input type="hidden" name="selected" value="{{ backup.selection_key }}">{% endfor %}
-        <label class="approval-check danger-check">
-          <input type="checkbox" required>
-          <span><strong>I understand this is permanent</strong><small>The selected original source backups will be deleted.</small></span>
-        </label>
-        {% if override_backups %}
-          <label class="approval-check danger-check">
-            <input type="checkbox" required>
-            <span><strong>I approve deleting backups before retention expires</strong><small>This override applies only to the selected recent backups shown above.</small></span>
-          </label>
-        {% endif %}
-        {% if unrecoverable_backups %}
-          <label class="approval-check danger-check">
-            <input type="checkbox" name="acknowledge_no_recovery" value="yes" required>
-            <span><strong>I accept permanent loss of recovery</strong><small>No valid compact archive exists for one or more selected originals.</small></span>
-          </label>
-        {% endif %}
-        <div class="stacked-actions">
-          <button class="danger" type="submit">{{ icon("trash") }} Permanently delete {{ backups|length }} backup(s)</button>
-          <a class="button secondary" href="/backups">Cancel and keep backups</a>
-        </div>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="selected" value="{{ backup_set.selection_key }}"><input type="hidden" name="deletion_kind" value="{{ deletion_kind }}">
+        <label class="approval-check danger-check"><input type="checkbox" name="approved" value="yes" required><span><strong>I approve permanent deletion</strong><small>The selected backup files cannot be recovered by dovi-manager.</small></span></label>
+        {% if removes_last %}<label class="approval-check danger-check"><input type="checkbox" name="acknowledge_no_recovery" value="yes" required><span><strong>I understand no recovery source remains</strong><small>This movie will retain only its current MKV.</small></span></label>{% endif %}
+        <div class="stacked-actions"><button class="danger" type="submit">{{ icon("trash") }} Delete permanently</button><a class="button secondary" href="/backups">Cancel</a></div>
       </form>
     </aside>
   </div>
