@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "macros/icons.html" import icon %}
+{% block title %}Manage backups - dovi-manager{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/backups">Backups</a>{{ icon("chevron-right") }}<span>{{ backup_set.relative_path|path_name }}</span></nav>
+  <section class="page-header"><div class="page-header-copy"><div class="eyebrow">{{ icon("backups") }} Backup actions</div><h1>{{ backup_set.relative_path|path_name }}</h1><p>{{ backup_set.root_label }} / {{ backup_set.relative_path|path_parent }}</p></div></section>
+  <section class="panel">{% include "partials/backup_actions.html" %}</section>
+{% endblock %}

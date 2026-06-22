@@ -3,7 +3,7 @@ from pathlib import Path
 import tarfile
 
 from app.config import MediaRoot
-from app.models import BackupFile, RecoveryArchive
+from app.models import BackupFile, BackupSet, RecoveryArchive
 from app.safety import (
     BACKUP_SUFFIX,
     PathSafetyError,
@@ -120,11 +120,14 @@ def discover_all_backups(
 
 def discover_recovery_archives(
     media_root: Path,
+    retention_days: int = 30,
     *,
+    now: datetime | None = None,
     root_id: str = "default",
     root_label: str = "Movies",
 ) -> list[RecoveryArchive]:
     archives: list[RecoveryArchive] = []
+    reference_time = now or datetime.now(UTC)
     if not media_root.exists():
         return archives
 
@@ -149,6 +152,15 @@ def discover_recovery_archives(
         elif valid and restored.exists():
             reason = "Restored output already exists"
         stat = path.stat()
+        modified = datetime.fromtimestamp(stat.st_mtime, UTC)
+        age_days = max(0, (reference_time - modified).days)
+        eligible = counterpart_exists and age_days >= retention_days
+        if not counterpart_exists:
+            deletion_reason = "Protected: converted counterpart is missing"
+        elif age_days < retention_days:
+            deletion_reason = f"Retained for {retention_days - age_days} more day(s)"
+        else:
+            deletion_reason = "Eligible for confirmed deletion"
         archives.append(
             RecoveryArchive(
                 relative_path=relative_path,
@@ -161,6 +173,9 @@ def discover_recovery_archives(
                 restored_exists=restored.is_file() and not restored.is_symlink(),
                 valid=valid,
                 reason=reason,
+                age_days=age_days,
+                eligible=eligible,
+                deletion_reason=deletion_reason,
                 root_id=root_id,
                 root_label=root_label,
             )
@@ -170,14 +185,62 @@ def discover_recovery_archives(
 
 def discover_all_recovery_archives(
     roots: tuple[MediaRoot, ...],
+    retention_days: int = 30,
+    *,
+    now: datetime | None = None,
 ) -> list[RecoveryArchive]:
     archives: list[RecoveryArchive] = []
     for root in roots:
         archives.extend(
             discover_recovery_archives(
                 root.path,
+                retention_days,
+                now=now,
                 root_id=root.id,
                 root_label=root.label,
             )
         )
     return sorted(archives, key=lambda item: (item.root_label, item.relative_path))
+
+
+def discover_backup_sets(
+    roots: tuple[MediaRoot, ...],
+    retention_days: int,
+    *,
+    now: datetime | None = None,
+) -> list[BackupSet]:
+    full_backups = discover_all_backups(roots, retention_days, now=now)
+    compact_archives = discover_all_recovery_archives(
+        roots, retention_days, now=now
+    )
+    grouped: dict[tuple[str, str], dict[str, BackupFile | RecoveryArchive]] = {}
+    labels = {root.id: root.label for root in roots}
+
+    for backup in full_backups:
+        target = backup.counterpart_path.relative_to(
+            next(root.path.resolve() for root in roots if root.id == backup.root_id)
+        ).as_posix()
+        grouped.setdefault((backup.root_id, target), {})["full"] = backup
+    for archive in compact_archives:
+        target = archive.counterpart_path.relative_to(
+            next(root.path.resolve() for root in roots if root.id == archive.root_id)
+        ).as_posix()
+        grouped.setdefault((archive.root_id, target), {})["compact"] = archive
+
+    result: list[BackupSet] = []
+    for (root_id, target), artifacts in grouped.items():
+        root = next(root for root in roots if root.id == root_id)
+        counterpart = (root.path / target).resolve()
+        result.append(
+            BackupSet(
+                relative_path=target,
+                counterpart_path=counterpart,
+                counterpart_exists=counterpart.is_file()
+                and not counterpart.is_symlink(),
+                root_id=root_id,
+                root_label=labels[root_id],
+                full=artifacts.get("full"),  # type: ignore[arg-type]
+                compact=artifacts.get("compact"),  # type: ignore[arg-type]
+            )
+        )
+    return sorted(result, key=lambda item: (item.root_label, item.relative_path))

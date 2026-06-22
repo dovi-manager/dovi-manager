@@ -541,6 +541,36 @@ function setupInfoTips() {
   });
 }
 
+function setupBackupDialogs() {
+  document.querySelectorAll("[data-dialog-open]").forEach((button) => {
+    const dialog = document.getElementById(button.dataset.dialogOpen);
+    if (!dialog?.showModal) return;
+    button.addEventListener("click", () => dialog.showModal());
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+  });
+}
+
+function setupCompactBackupPolicy() {
+  const compact = document.querySelector("[data-compact-backup-toggle]");
+  const compactOnly = document.querySelector("[data-compact-only-toggle]");
+  const acknowledgement = document.querySelector("[data-compact-only-ack]");
+  const wrapper = document.querySelector("[data-compact-only-ack-wrapper]");
+  if (!compact || !compactOnly || !acknowledgement) return;
+  const update = () => {
+    compactOnly.disabled = !compact.checked;
+    if (!compact.checked) compactOnly.checked = false;
+    const required = compactOnly.checked && compactOnly.dataset.initial !== "true";
+    acknowledgement.required = required;
+    wrapper?.classList.toggle("hidden", !required);
+    if (!required) acknowledgement.checked = false;
+  };
+  compact.addEventListener("change", update);
+  compactOnly.addEventListener("change", update);
+  update();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   formatTimes();
   document.querySelectorAll(".dismiss-alert").forEach((button) => {
@@ -562,6 +592,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupSecretToggles();
   setupRecursiveControls();
   setupInfoTips();
+  setupBackupDialogs();
+  setupCompactBackupPolicy();
   setupSettingsSections();
   pollSummary();
 });

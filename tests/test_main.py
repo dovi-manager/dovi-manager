@@ -1,7 +1,9 @@
 import sqlite3
 import base64
+import io
 import os
 import re
+import tarfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -62,6 +64,14 @@ def csrf_data(app, **values) -> dict[str, str]:
         **values,
         "csrf_token": csrf_token(app.state.csrf_secret, "local"),
     }
+
+
+def write_compact_archive(path: Path) -> None:
+    payload = b"enhancement-layer"
+    with tarfile.open(path, "w") as archive:
+        member = tarfile.TarInfo("el.hevc")
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
 
 
 def test_healthz(tmp_path: Path) -> None:
@@ -701,7 +711,7 @@ def test_every_post_form_contains_csrf_token() -> None:
             )
         )
 
-    assert len(forms) == 16
+    assert len(forms) == 15
     assert all('name="csrf_token"' in form for form in forms)
 
 
@@ -789,7 +799,9 @@ def test_operational_pages_render_empty_states_and_responsive_labels(
 
     assert "No candidates found" in candidates.text
     assert "No jobs found" in jobs.text
-    assert "No source backups found" in backups.text
+    assert "No backups found" in backups.text
+    assert "Full Original" in backups.text
+    assert "Compact Recovery" in backups.text
     templates = Path(__file__).parents[1] / "app" / "templates"
     assert 'data-label="Media file"' in (templates / "candidates.html").read_text(
         encoding="utf-8"
@@ -797,7 +809,7 @@ def test_operational_pages_render_empty_states_and_responsive_labels(
     assert 'data-label="Target"' in (templates / "jobs.html").read_text(
         encoding="utf-8"
     )
-    assert 'data-label="Deletion status"' in (templates / "backups.html").read_text(
+    assert 'data-label="Backup types"' in (templates / "backups.html").read_text(
         encoding="utf-8"
     )
 
@@ -816,15 +828,16 @@ def test_backup_retention_override_is_settings_gated(tmp_path: Path) -> None:
         locked = client.get("/backups")
         app.state.repository.set_settings({"allow_backup_retention_override": "true"})
         unlocked = client.get("/backups")
-        confirm = client.post(
-            "/backups/confirm",
-            data=csrf_data(app, selected=f"default:{backup.name}"),
+        confirm = client.get(
+            "/backups/delete/confirm?item=default%3AMovie.mkv&kind=full"
         )
         delete = client.post(
             "/backups/delete",
             data=csrf_data(
                 app,
-                selected=f"default:{backup.name}",
+                selected="default:Movie.mkv",
+                deletion_kind="full",
+                approved="yes",
                 acknowledge_no_recovery="yes",
             ),
             follow_redirects=False,
@@ -832,13 +845,32 @@ def test_backup_retention_override_is_settings_gated(tmp_path: Path) -> None:
         job = app.state.repository.get_job(1)
 
     assert "disabled" in locked.text
-    assert "No backups are eligible for deletion yet." in locked.text
-    assert "data-select-eligible disabled" in locked.text
-    assert "data-clear-selection disabled" in locked.text
-    assert 'data-retention-override="true"' in unlocked.text
-    assert "Retention override selected" in confirm.text
+    assert 'aria-disabled="true"' in locked.text
+    assert "Retained for" in locked.text
+    assert "kind=full" in unlocked.text
+    assert "Retention override" in confirm.text
     assert delete.status_code == 303
     assert '"retention_override":true' in job["payload_json"]
+
+
+def test_backup_page_groups_two_types_and_offers_recovery_choice(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    (settings.media_root / "Movie.mkv").write_bytes(b"converted")
+    (settings.media_root / "Movie.mkv.bak.dovi_convert").write_bytes(b"original")
+    write_compact_archive(settings.media_root / "Movie.dovi")
+    app = create_app(settings, start_worker=False)
+
+    with TestClient(app) as client:
+        response = client.get("/backups")
+        manage = client.get("/backups/manage?item=default%3AMovie.mkv")
+
+    assert response.text.count('data-label="Movie"') == 1
+    assert "Full Original" in response.text
+    assert "Compact Recovery" in response.text
+    assert "Use Full Original" in manage.text
+    assert "Use Compact Recovery" in manage.text
 
 
 def test_ui_templates_do_not_use_inline_styles() -> None:
@@ -846,6 +878,22 @@ def test_ui_templates_do_not_use_inline_styles() -> None:
 
     for path in templates.rglob("*.html"):
         assert " style=" not in path.read_text(encoding="utf-8"), path
+
+
+def test_conversion_risk_warning_is_only_on_conversion_reviews() -> None:
+    templates = Path(__file__).parents[1] / "app" / "templates"
+    conversion = (templates / "conversion_confirm.html").read_text(encoding="utf-8")
+    bulk = (templates / "bulk_mel_confirm.html").read_text(encoding="utf-8")
+
+    assert conversion.count('class="alert alert-warning"') == 1
+    assert bulk.count('class="alert alert-warning"') == 1
+    assert "Verify the converted file before deleting the full original" in conversion
+    assert "Verify every converted file before deleting its full original" in bulk
+    for name in ("dashboard.html", "candidates.html", "candidate_detail.html"):
+        assert "Classification is not definitive" not in (
+            templates / name
+        ).read_text(encoding="utf-8")
+        assert "scan estimates" not in (templates / name).read_text(encoding="utf-8")
 
 
 def test_shell_includes_keyboard_and_reduced_motion_support(tmp_path: Path) -> None:
@@ -869,12 +917,8 @@ def test_progressive_enhancements_keep_server_forms_available() -> None:
     backups = (templates / "backups.html").read_text(encoding="utf-8")
     settings = (templates / "settings.html").read_text(encoding="utf-8")
 
-    review_button = re.search(
-        r'<button class="danger" type="submit" data-review-deletions([^>]*)>',
-        backups,
-    )
-    assert review_button is not None
-    assert "disabled" not in review_button.group(1)
+    assert "<noscript>" in backups
+    assert 'href="/backups/manage?item=' in backups
     assert 'class="automation-disclosure"' in settings
 
 
@@ -1196,7 +1240,10 @@ def test_simple_fel_route_requires_and_records_manual_approval(
 
     assert confirmation.status_code == 200
     assert "Simple FEL" in confirmation.text
-    assert "Simple FEL requires judgment" in confirmation.text
+    assert "Verify the converted file before deleting the full original" in (
+        confirmation.text
+    )
+    assert "Simple FEL also requires this manual approval" in confirmation.text
     assert "--force" in confirmation.text
     assert "--delete" in confirmation.text
     assert "Backup retained" in confirmation.text
@@ -1276,7 +1323,7 @@ def test_dashboard_backup_summary_is_cached(
         calls += 1
         return []
 
-    monkeypatch.setattr("app.main.discover_all_backups", fake_discover)
+    monkeypatch.setattr("app.main.discover_backup_sets", fake_discover)
     app = create_app(make_settings(tmp_path), start_worker=False)
 
     with TestClient(app) as client:

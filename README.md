@@ -20,14 +20,16 @@ for the actual media conversion engine.
 - Converts safe MEL files to Profile 8.1 manually, or automatically if enabled.
 - Keeps Simple FEL conversion manual and blocks Complex FEL conversion.
 - Runs one background job at a time with logs and status.
-- Keeps original files as `.mkv.bak.dovi_convert` backups.
-- Creates compact `.dovi` enhancement-layer recovery archives by default.
-- Provides reviewed backup deletion and non-destructive Profile 7 restoration.
+- Supports full-original, compact `.dovi`, or combined backup modes.
+- Uses compact-only recovery by default after validating conversion outputs.
+- Groups both backup types per movie and provides reviewed Profile 7 recovery.
 - Supports scheduled Smart Scans and Radarr/Sonarr webhooks.
 
 Safety defaults:
 
 - dovi-manager never passes `--force` or `--delete` to `dovi_convert`.
+- Compact-only mode removes the full original only after the converted MKV,
+  compact archive, and temporary full backup have all been validated.
 - Files must stay under configured media roots.
 - Files being written to are skipped.
 - Backup deletion always requires confirmation.
@@ -107,9 +109,12 @@ conversion replaces the source file and writes a sibling backup.
 4. Try one copied MEL file first.
 5. Confirm the converted file plays correctly before enabling automation.
 
-Compact recovery archives use dovi_convert 8.2's Backup & Restore feature. A
-restore keeps both the converted MKV and `.dovi` archive and writes a separate
-`.restored.mkv` file. Archive matching is filename-based, so restore only an
+Compact recovery archives use dovi_convert 8.2's Backup & Restore feature. The
+Backups page shows full originals and compact archives together for each movie.
+Recovery is intentionally destructive: the selected recovery method replaces
+the current converted MKV. Full recovery keeps the full original but removes a
+sibling compact archive; compact recovery consumes the `.dovi` archive after a
+successful replacement. Archive matching is filename-based, so recover only an
 archive created from that source file.
 
 Smart Scan only calls `dovi_convert` for new or changed files. Full Scan

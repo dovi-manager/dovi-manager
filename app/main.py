@@ -8,7 +8,11 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.automation import AutomationCoordinator
-from app.backups import discover_all_backups, discover_all_recovery_archives
+from app.backups import (
+    discover_all_backups,
+    discover_all_recovery_archives,
+    discover_backup_sets,
+)
 from app.config import Settings, load_settings, validate_media_roots
 from app.db import initialize_database
 from app.repository import Repository
@@ -58,6 +62,7 @@ def create_app(
         asset_version=_asset_version(build_info.revision),
         discover_backups=discover_all_backups,
         discover_recovery_archives=discover_all_recovery_archives,
+        discover_backup_sets=discover_backup_sets,
         which=shutil.which,
     )
 

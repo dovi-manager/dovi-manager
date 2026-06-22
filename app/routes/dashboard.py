@@ -28,7 +28,7 @@ async def dashboard_backup_summary(ctx: AppContext) -> tuple[int, int]:
                 )
             )
             backups = await asyncio.to_thread(
-                ctx.discover_backups,
+                ctx.discover_backup_sets,
                 ctx.settings.media_roots,
                 retention_days,
             )
@@ -36,7 +36,7 @@ async def dashboard_backup_summary(ctx: AppContext) -> tuple[int, int]:
                 {
                     "expires_at": now + 60,
                     "count": len(backups),
-                    "size": sum(item.size for item in backups),
+                    "size": sum(item.total_size for item in backups),
                 }
             )
     return (

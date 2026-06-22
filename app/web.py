@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.automation import AutomationCoordinator
 from app.config import Settings
-from app.models import BackupFile, CandidateCategory, JobKind, JobState, RecoveryArchive
+from app.models import BackupFile, BackupSet, CandidateCategory, JobKind, JobState, RecoveryArchive
 from app.readiness import check_readiness
 from app.repository import Repository
 from app.security import csrf_token, verify_csrf_token
@@ -30,6 +30,7 @@ APP_DIR = Path(__file__).parent
 PAGE_SIZE = 50
 BackupDiscovery = Callable[[Any, int], list[BackupFile]]
 RecoveryArchiveDiscovery = Callable[[Any], list[RecoveryArchive]]
+BackupSetDiscovery = Callable[[Any, int], list[BackupSet]]
 
 templates = Jinja2Templates(directory=APP_DIR / "templates")
 templates.env.globals["candidate_categories"] = list(CandidateCategory)
@@ -117,6 +118,7 @@ class AppContext:
     asset_version: str
     discover_backups: BackupDiscovery
     discover_recovery_archives: RecoveryArchiveDiscovery
+    discover_backup_sets: BackupSetDiscovery
     which: Callable[[str], str | None]
     backup_summary_cache: dict[str, float | int] = field(
         default_factory=lambda: {"expires_at": 0.0, "count": 0, "size": 0}

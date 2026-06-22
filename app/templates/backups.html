@@ -5,118 +5,57 @@
 {% block content %}
   <section class="page-header">
     <div class="page-header-copy">
-      <div class="eyebrow">{{ icon("backups") }} Source protection</div>
+      <div class="eyebrow">{{ icon("backups") }} Movie protection</div>
       <h1>Backup and recovery</h1>
-      <p>Manage full original backups and compact <code>.dovi</code> enhancement-layer recovery archives.</p>
+      <p>Each movie appears once, with labels for every recovery type stored beside it.</p>
     </div>
-    <a class="button secondary" href="/settings">{{ icon("settings") }} Retention settings</a>
+    <div class="actions"><a class="button secondary" href="/settings#conversion-defaults">{{ icon("settings") }} Backup defaults</a><a class="button secondary" href="/settings#backup-retention">{{ icon("clock") }} Retention</a></div>
+  </section>
+
+  <section class="panel backup-type-guide">
+    <div class="backup-type-grid">
+      <article><span class="file-icon">{{ icon("file") }}</span><div><h3>Full Original</h3><code>Movie.mkv.bak.dovi_convert</code><p>The complete Profile 7 source. Fastest and most direct recovery, but approximately the size of the movie.</p></div></article>
+      <article><span class="file-icon">{{ icon("backups") }}</span><div><h3>Compact Recovery</h3><code>Movie.dovi</code><p>Dolby Vision recovery data only. It requires the converted MKV and uses dovi_convert to rebuild Profile 7.</p></div></article>
+    </div>
   </section>
 
   <div class="backup-metrics">
-    <article><span>{{ icon("backups") }}</span><div><small>Total backups</small><strong>{{ backups|length }}</strong><em>{{ total_size|human_size }} protected</em></div></article>
-    <article><span>{{ icon("clock") }}</span><div><small>Retention policy</small><strong>{{ retention_days }} days</strong><em>Minimum age before deletion</em></div></article>
-    <article><span>{{ icon("trash") }}</span><div><small>Eligible now</small><strong>{{ eligible_count }}</strong><em>{{ eligible_size|human_size }} can be reviewed{% if allow_retention_override and override_count %}; {{ override_count }} need override{% endif %}</em></div></article>
+    <article><span>{{ icon("file") }}</span><div><small>Protected movies</small><strong>{{ backup_sets|length }}</strong><em>{{ total_size|human_size }} total</em></div></article>
+    <article><span>{{ icon("shield") }}</span><div><small>Full originals</small><strong>{{ full_count }}</strong><em>complete source files</em></div></article>
+    <article><span>{{ icon("backups") }}</span><div><small>Compact recovery</small><strong>{{ compact_count }}</strong><em>enhancement-layer archives</em></div></article>
   </div>
 
-  {% if backups %}
-    {% set selectable_count = eligible_count + (override_count if allow_retention_override else 0) %}
-    <form action="/backups/confirm" method="post" data-backup-form>
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="selection-toolbar">
-        <div>
-          <button class="button secondary" type="button" data-select-eligible {% if selectable_count == 0 %}disabled{% endif %}>{{ icon("check") }} Select all eligible</button>
-          <button class="button ghost" type="button" data-clear-selection {% if selectable_count == 0 %}disabled{% endif %}>Clear</button>
-        </div>
-        <div class="selection-summary" aria-live="polite">
-          <strong data-selected-count>0 selected</strong>
-          <span data-selected-size>0.0 B</span>
-        </div>
-        <button class="danger" type="submit" data-review-deletions>{{ icon("trash") }} Review deletions</button>
-      </div>
-      {% if selectable_count == 0 %}
-        <div class="inline-status">{{ icon("clock") }} No backups are eligible for deletion yet. Retention and orphan protections are still active.</div>
-      {% endif %}
-      <div class="table-wrap responsive-table backups-table">
-        <table>
-          <thead><tr><th class="checkbox-column"><span class="sr-only">Select</span></th><th>Backup file</th><th>Size</th><th>Age</th><th>Recovery</th><th>Deletion status</th></tr></thead>
-          <tbody>
-            {% for backup in backups %}
-              <tr class="{% if not backup.eligible %}ineligible-row{% endif %}">
-                <td class="checkbox-column" data-label="Select">
-                  {% set override_allowed = allow_retention_override and backup.counterpart_exists and not backup.eligible and backup.age_days < retention_days %}
-                  <input type="checkbox" name="selected" value="{{ backup.selection_key }}" data-size="{{ backup.size }}" aria-label="Select {{ backup.relative_path }} in {{ backup.root_label }}" {% if override_allowed %}data-retention-override="true"{% endif %} {% if not backup.eligible and not override_allowed %}disabled{% endif %}>
-                </td>
-                <td data-label="Backup file">
-                  <span class="file-cell">
-                    <span class="file-icon">{{ icon("file") }}</span>
-                    <span><strong>{{ backup.relative_path|path_name }}</strong><small>{{ backup.root_label }} / {{ backup.relative_path|path_parent }}</small></span>
-                  </span>
-                </td>
-                <td data-label="Size">{{ backup.size|human_size }}</td>
-                <td data-label="Age"><span class="age-value">{{ backup.age_days }}</span> day(s)</td>
-                <td data-label="Recovery">
-                  {% if backup.recovery_archive_valid %}
-                    <span class="status-text is-positive">{{ icon("check") }} Compact archive ready</span>
-                  {% else %}
-                    <span class="status-text is-warning">{{ icon("alert") }} No valid archive</span>
-                  {% endif %}
-                </td>
-                <td data-label="Deletion status">
-                  {% if backup.eligible %}
-                    <span class="status-text is-warning">{{ icon("check") }} Eligible for review</span>
-                  {% elif override_allowed %}
-                    <span class="status-text is-warning">{{ icon("alert") }} Needs retention override</span>
-                  {% else %}
-                    <span class="status-text">{{ icon("clock") }} {{ backup.reason }}</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </form>
+  {% if backup_sets %}
+    <div class="table-wrap responsive-table backups-table unified-backups-table">
+      <table>
+        <thead><tr><th>Movie</th><th>Backup types</th><th>Current MKV</th><th>Stored size</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for backup_set in backup_sets %}
+            <tr>
+              <td data-label="Movie"><span class="file-cell"><span class="file-icon">{{ icon("file") }}</span><span><strong>{{ backup_set.relative_path|path_name }}</strong><small>{{ backup_set.root_label }} / {{ backup_set.relative_path|path_parent }}</small></span></span></td>
+              <td data-label="Backup types">
+                <div class="backup-labels">
+                  {% if backup_set.full %}<span class="backup-label backup-label-full"><strong>Full Original</strong><small>{{ backup_set.full.size|human_size }} · {{ backup_set.full.age_days }} days · {{ backup_set.full.reason }}</small></span>{% endif %}
+                  {% if backup_set.compact %}<span class="backup-label backup-label-compact"><strong>Compact Recovery</strong><small>{{ backup_set.compact.size|human_size }} · {{ backup_set.compact.age_days }} days · {{ backup_set.compact.deletion_reason }}</small></span>{% endif %}
+                </div>
+              </td>
+              <td data-label="Current MKV"><span class="status-text {% if backup_set.counterpart_exists %}is-positive{% else %}is-warning{% endif %}">{{ icon("check" if backup_set.counterpart_exists else "alert") }} {{ "Available" if backup_set.counterpart_exists else "Missing" }}</span></td>
+              <td data-label="Stored size">{{ backup_set.total_size|human_size }}</td>
+              <td data-label="Actions">
+                <button class="secondary" type="button" data-dialog-open="backup-dialog-{{ loop.index }}">Manage backups</button>
+                <noscript><a class="button secondary" href="/backups/manage?item={{ backup_set.selection_key|urlencode }}">Manage backups</a></noscript>
+                <dialog id="backup-dialog-{{ loop.index }}" class="backup-dialog">
+                  <form method="dialog" class="dialog-close-row"><button class="icon-button" aria-label="Close">{{ icon("x") }}</button></form>
+                  <div class="section-heading compact"><div><span class="eyebrow">{{ backup_set.root_label }}</span><h2>{{ backup_set.relative_path|path_name }}</h2></div></div>
+                  {% include "partials/backup_actions.html" %}
+                </dialog>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <div class="empty-state">
-      <div class="empty-state-content">
-        <span class="empty-state-icon">{{ icon("backups") }}</span>
-        <h2>No source backups found</h2>
-        <p>No <code>.mkv.bak.dovi_convert</code> files were found below the configured media root.</p>
-      </div>
-    </div>
+    <div class="empty-state"><div class="empty-state-content"><span class="empty-state-icon">{{ icon("backups") }}</span><h2>No backups found</h2><p>No full originals or compact recovery archives were found under the configured media roots.</p></div></div>
   {% endif %}
-
-  <section class="panel inspection-history-panel">
-    <div class="section-heading compact">
-      <div><span class="eyebrow">Compact recovery</span><h2>Recovery archives</h2></div>
-      <strong>{{ recovery_archives|length }} archive(s) &middot; {{ recovery_size|human_size }}</strong>
-    </div>
-    <p class="quiet-value">A <code>.dovi</code> archive stores the enhancement layer. Filename matching cannot prove that an archive came from a particular MKV; restore only archives you created from that source.</p>
-    {% if recovery_archives %}
-      <div class="table-wrap responsive-table backups-table">
-        <table>
-          <thead><tr><th>Recovery archive</th><th>Size</th><th>Converted MKV</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>
-            {% for archive in recovery_archives %}
-              <tr>
-                <td data-label="Recovery archive"><span class="file-cell"><span class="file-icon">{{ icon("backups") }}</span><span><strong>{{ archive.relative_path|path_name }}</strong><small>{{ archive.root_label }} / {{ archive.relative_path|path_parent }}</small></span></span></td>
-                <td data-label="Size">{{ archive.size|human_size }}</td>
-                <td data-label="Converted MKV">{{ archive.counterpart_path.name if archive.counterpart_exists else "Missing" }}</td>
-                <td data-label="Status"><span class="status-text {% if archive.valid and archive.counterpart_exists and not archive.restored_exists %}is-positive{% else %}is-warning{% endif %}">{{ icon("check" if archive.valid and archive.counterpart_exists and not archive.restored_exists else "alert") }} {{ archive.reason }}</span></td>
-                <td data-label="Action">
-                  {% if archive.valid and archive.counterpart_exists and not archive.restored_exists %}
-                    <a class="button secondary" href="/backups/restore/confirm?archive={{ archive.selection_key|urlencode }}">Restore</a>
-                  {% else %}
-                    <span class="quiet-value">Unavailable</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="empty-state compact-empty"><div class="empty-state-content"><span class="empty-state-icon">{{ icon("backups") }}</span><h2>No recovery archives found</h2><p>Create one from a candidate or during conversion.</p></div></div>
-    {% endif %}
-  </section>
 {% endblock %}

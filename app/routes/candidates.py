@@ -186,6 +186,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             create_recovery_archive_default=(
                 runtime.create_recovery_archive_on_convert
             ),
+            backup_mode_default=runtime.backup_mode.value,
         )
 
     @app.post("/candidates/{candidate_id:int}/convert")
@@ -193,6 +194,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         request: Request,
         candidate_id: int,
         approved: str | None = Form(default=None),
+        backup_mode: str | None = Form(default=None),
         create_recovery_archive: str | None = Form(default=None),
         _: None = Depends(ctx.require_csrf),
     ) -> RedirectResponse:
@@ -201,6 +203,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                 candidate_id,
                 approved=approved == "yes",
                 approved_by=current_actor(request),
+                backup_mode=backup_mode,
                 create_recovery_archive=create_recovery_archive == "yes",
             )
             ctx.worker.notify()
@@ -222,12 +225,14 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             create_recovery_archive_default=(
                 runtime.create_recovery_archive_on_convert
             ),
+            backup_mode_default=runtime.backup_mode.value,
         )
 
     @app.post("/candidates/bulk-mel/convert")
     async def queue_bulk_mel(
         request: Request,
         approved: str | None = Form(default=None),
+        backup_mode: str | None = Form(default=None),
         create_recovery_archive: str | None = Form(default=None),
         _: None = Depends(ctx.require_csrf),
     ) -> RedirectResponse:
@@ -235,6 +240,7 @@ def register(app: FastAPI, ctx: AppContext) -> None:
             job_ids, skipped = ctx.job_service.queue_bulk_mel(
                 approved=approved == "yes",
                 approved_by=current_actor(request),
+                backup_mode=backup_mode,
                 create_recovery_archive=create_recovery_archive == "yes",
             )
             ctx.worker.notify()

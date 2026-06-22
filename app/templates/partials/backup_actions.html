@@ -1,0 +1,17 @@
+<div class="backup-action-groups">
+  <section>
+    <h3>Recover Profile 7</h3>
+    <p>Recovery permanently replaces the current converted MKV.</p>
+    {% if backup_set.full %}<a class="button secondary" href="/backups/recover/confirm?item={{ backup_set.selection_key|urlencode }}&kind=full">Use Full Original</a>{% endif %}
+    {% if backup_set.compact and backup_set.compact.valid and backup_set.counterpart_exists and not backup_set.compact.restored_exists %}<a class="button secondary" href="/backups/recover/confirm?item={{ backup_set.selection_key|urlencode }}&kind=compact">Use Compact Recovery</a>{% elif backup_set.compact %}<span class="quiet-value">Compact recovery unavailable: {{ backup_set.compact.reason }}</span>{% endif %}
+  </section>
+  <section>
+    <h3>Delete stored protection</h3>
+    <p>Retention is {{ retention_days }} days. Every deletion has a separate confirmation.</p>
+    {% set full_selectable = backup_set.full and (backup_set.full.eligible or (allow_retention_override and backup_set.full.counterpart_exists)) %}
+    {% set compact_selectable = backup_set.compact and (backup_set.compact.eligible or (allow_retention_override and backup_set.compact.counterpart_exists)) %}
+    {% if backup_set.full %}<a class="button danger {% if not full_selectable %}disabled{% endif %}" {% if full_selectable %}href="/backups/delete/confirm?item={{ backup_set.selection_key|urlencode }}&kind=full"{% else %}aria-disabled="true"{% endif %}>Delete Full Original</a>{% endif %}
+    {% if backup_set.compact %}<a class="button danger {% if not compact_selectable %}disabled{% endif %}" {% if compact_selectable %}href="/backups/delete/confirm?item={{ backup_set.selection_key|urlencode }}&kind=compact"{% else %}aria-disabled="true"{% endif %}>Delete Compact Recovery</a>{% endif %}
+    {% if backup_set.full and backup_set.compact %}<a class="button danger {% if not full_selectable or not compact_selectable %}disabled{% endif %}" {% if full_selectable and compact_selectable %}href="/backups/delete/confirm?item={{ backup_set.selection_key|urlencode }}&kind=both"{% else %}aria-disabled="true"{% endif %}>Delete Both</a>{% endif %}
+  </section>
+</div>

@@ -9,7 +9,7 @@ from typing import Any
 
 from app.backups import (
     RECOVERY_ARCHIVE_SUFFIX,
-    discover_all_backups,
+    discover_backup_sets,
     validate_recovery_archive,
 )
 from app.config import Settings
@@ -22,6 +22,7 @@ from app.dovi import (
     scan_command,
 )
 from app.models import (
+    BackupMode,
     CandidateCategory,
     FileFingerprint,
     JobKind,
@@ -493,6 +494,15 @@ class JobWorker:
         backup_path = path.with_suffix(f".mkv{BACKUP_SUFFIX}")
         archive_path = path.with_suffix(RECOVERY_ARCHIVE_SUFFIX)
         create_recovery_archive = bool(payload.get("create_recovery_archive"))
+        try:
+            backup_mode = BackupMode(
+                payload.get(
+                    "backup_mode",
+                    "both" if create_recovery_archive else "full_only",
+                )
+            )
+        except ValueError as exc:
+            raise PathSafetyError("invalid queued backup mode") from exc
         if backup_path.exists():
             raise PathSafetyError("conversion backup already exists")
         if create_recovery_archive and archive_path.exists():
@@ -580,6 +590,21 @@ class JobWorker:
                 archive_valid, archive_reason = validate_recovery_archive(archive_path)
                 if not archive_valid:
                     raise PathSafetyError(archive_reason)
+            if backup_mode is BackupMode.COMPACT_ONLY:
+                try:
+                    backup_path.unlink()
+                    self.repository.append_job_log(
+                        job["id"],
+                        "Compact-only policy: removed validated full original backup.\n",
+                        self.settings.job_log_limit,
+                    )
+                except OSError as exc:
+                    if job["candidate_id"] is not None:
+                        self.repository.deactivate_candidate(job["candidate_id"])
+                    raise PathSafetyError(
+                        "conversion succeeded but compact-only cleanup failed; "
+                        "the full original was retained"
+                    ) from exc
             if job["candidate_id"] is not None:
                 self.repository.deactivate_candidate(job["candidate_id"])
             self.repository.finish_job(
@@ -640,80 +665,165 @@ class JobWorker:
         self.repository.finish_job(job["id"], JobState.SUCCEEDED, exit_code=0)
 
     async def _run_recovery_restore(self, job: Any) -> None:
-        path, payload = self._job_media_path(job)
+        payload = json.loads(job["payload_json"])
         root = self.settings.media_root_by_id(str(payload.get("root_id") or "default"))
-        archive_path = path_from_relative(root.path, payload["archive_relative_path"])
-        if (
-            archive_path.suffix.lower() != RECOVERY_ARCHIVE_SUFFIX
-            or archive_path.is_symlink()
-        ):
-            raise PathSafetyError("invalid recovery archive path")
+        path = path_from_relative(
+            root.path, payload["relative_path"], require_exists=False
+        )
+        recovery_path = path_from_relative(
+            root.path, payload["recovery_relative_path"]
+        )
+        recovery_kind = str(payload.get("recovery_kind") or "compact")
+        if recovery_kind not in {"full", "compact"}:
+            raise PathSafetyError("invalid recovery type")
+        if recovery_path.is_symlink() or not recovery_path.is_file():
+            raise PathSafetyError("recovery source is missing or not a regular file")
+        if recovery_kind == "full" and not recovery_path.name.endswith(BACKUP_SUFFIX):
+            raise PathSafetyError("invalid full original backup path")
+        if recovery_kind == "compact" and recovery_path.suffix.lower() != RECOVERY_ARCHIVE_SUFFIX:
+            raise PathSafetyError("invalid compact recovery path")
         require_fingerprint(
-            archive_path,
+            recovery_path,
             FileFingerprint(
-                size=int(payload["archive_size"]),
-                mtime_ns=int(payload["archive_mtime_ns"]),
+                size=int(payload["recovery_size"]),
+                mtime_ns=int(payload["recovery_mtime_ns"]),
             ),
         )
-        valid, reason = validate_recovery_archive(archive_path)
-        if not valid:
-            raise PathSafetyError(reason)
-        restored_path = path.with_name(f"{path.stem}.restored.mkv")
-        if restored_path.exists():
-            raise PathSafetyError("restored output already exists")
-        require_directory_writable(path.parent)
-        require_directory_writable(self.settings.temp_dir)
-        reserve_bytes = self.settings.disk_reserve_gib * 1024**3
-        restored_estimate = int(payload["file_size"]) + int(payload["archive_size"])
-        require_storage(
-            recovery_restore_storage_requirement(
+        expected_current = payload.get("file_size") is not None
+        if expected_current:
+            path = validate_media_file(root.path, path)
+            require_fingerprint(
                 path,
-                self.settings.temp_dir,
-                restored_estimate,
-                reserve_bytes,
-            ),
-            path.parent,
-            self.settings.temp_dir,
-        )
-        job_temp_dir = self.settings.temp_dir / "dovi-manager" / f"job-{job['id']}"
-        job_temp_dir.mkdir(parents=True, exist_ok=False)
-        try:
-            result = await self._run_command(
-                job["id"],
-                recovery_restore_command(
-                    self.settings.dovi_convert_path,
-                    path,
-                    job_temp_dir,
+                FileFingerprint(
+                    size=int(payload["file_size"]),
+                    mtime_ns=int(payload["file_mtime_ns"]),
                 ),
             )
-        finally:
-            shutil.rmtree(job_temp_dir, ignore_errors=True)
-        if result.exit_code != 0:
-            self.repository.finish_job(
-                job["id"],
-                JobState.FAILED,
-                exit_code=result.exit_code,
-                error="dovi_convert recovery restore failed",
+        elif path.exists():
+            raise PathSafetyError("target appeared after recovery approval")
+
+        compact_path = None
+        if payload.get("compact_relative_path"):
+            compact_path = path_from_relative(
+                root.path, payload["compact_relative_path"]
             )
-            return
-        if not restored_path.is_file() or restored_path.is_symlink():
-            raise PathSafetyError("restore reported success but output is missing")
-        if restored_path.stat().st_size <= 0:
-            raise PathSafetyError("restore reported success but output is empty")
+            if compact_path.is_symlink() or not compact_path.is_file():
+                raise PathSafetyError("compact archive changed before recovery")
+            require_fingerprint(
+                compact_path,
+                FileFingerprint(
+                    size=int(payload["compact_size"]),
+                    mtime_ns=int(payload["compact_mtime_ns"]),
+                ),
+            )
+        if recovery_kind == "compact":
+            valid, reason = validate_recovery_archive(recovery_path)
+            if not valid:
+                raise PathSafetyError(reason)
+            if not expected_current:
+                raise PathSafetyError("compact recovery requires the converted MKV")
+
+        await self.sleep(self.settings.stability_seconds)
         require_fingerprint(
-            path,
+            recovery_path,
             FileFingerprint(
-                size=int(payload["file_size"]),
-                mtime_ns=int(payload["file_mtime_ns"]),
+                size=int(payload["recovery_size"]),
+                mtime_ns=int(payload["recovery_mtime_ns"]),
             ),
         )
-        require_fingerprint(
-            archive_path,
-            FileFingerprint(
-                size=int(payload["archive_size"]),
-                mtime_ns=int(payload["archive_mtime_ns"]),
-            ),
-        )
+        if expected_current:
+            require_fingerprint(
+                path,
+                FileFingerprint(
+                    size=int(payload["file_size"]),
+                    mtime_ns=int(payload["file_mtime_ns"]),
+                ),
+            )
+
+        restored_path = path.with_name(f"{path.stem}.restored.mkv")
+        if recovery_kind == "compact" and restored_path.exists():
+            raise PathSafetyError("restored output already exists")
+        require_directory_writable(path.parent)
+        reserve_bytes = self.settings.disk_reserve_gib * 1024**3
+        if shutil.disk_usage(path.parent).free < int(payload["recovery_size"]) + reserve_bytes:
+            raise PathSafetyError("insufficient free space for recovery")
+
+        if recovery_kind == "compact":
+            require_directory_writable(self.settings.temp_dir)
+            restored_estimate = int(payload["file_size"]) + int(
+                payload["recovery_size"]
+            )
+            require_storage(
+                recovery_restore_storage_requirement(
+                    path,
+                    self.settings.temp_dir,
+                    restored_estimate,
+                    reserve_bytes,
+                ),
+                path.parent,
+                self.settings.temp_dir,
+            )
+
+            job_temp_dir = self.settings.temp_dir / "dovi-manager" / f"job-{job['id']}"
+            job_temp_dir.mkdir(parents=True, exist_ok=False)
+            try:
+                result = await self._run_command(
+                    job["id"],
+                    recovery_restore_command(
+                        self.settings.dovi_convert_path,
+                        path,
+                        job_temp_dir,
+                    ),
+                )
+            finally:
+                shutil.rmtree(job_temp_dir, ignore_errors=True)
+            if result.exit_code != 0:
+                self.repository.finish_job(
+                    job["id"],
+                    JobState.FAILED,
+                    exit_code=result.exit_code,
+                    error="dovi_convert recovery restore failed",
+                )
+                return
+            if not restored_path.is_file() or restored_path.is_symlink():
+                raise PathSafetyError("restore reported success but output is missing")
+            if restored_path.stat().st_size <= 0:
+                raise PathSafetyError("restore reported success but output is empty")
+            staged_path = restored_path
+        else:
+            staged_path = path.with_name(f".{path.name}.restore-{job['id']}.tmp")
+            if staged_path.exists():
+                raise PathSafetyError("recovery staging file already exists")
+            await asyncio.to_thread(shutil.copy2, recovery_path, staged_path)
+            if staged_path.stat().st_size != int(payload["recovery_size"]):
+                staged_path.unlink(missing_ok=True)
+                raise PathSafetyError("staged full original size mismatch")
+
+        tombstone = None
+        replaced = False
+        try:
+            if compact_path is not None:
+                tombstone = compact_path.with_name(
+                    f".{compact_path.name}.restore-{job['id']}.pending-delete"
+                )
+                if tombstone.exists():
+                    raise PathSafetyError("recovery archive tombstone already exists")
+                compact_path.replace(tombstone)
+            staged_path.replace(path)
+            replaced = True
+            if tombstone is not None:
+                tombstone.unlink()
+            self.repository.append_job_log(
+                job["id"],
+                "Installed recovered Profile 7 MKV and removed the converted file.\n",
+                self.settings.job_log_limit,
+            )
+        except Exception:
+            if not replaced and tombstone is not None and tombstone.exists():
+                tombstone.replace(compact_path)
+            if not replaced:
+                staged_path.unlink(missing_ok=True)
+            raise
         self.repository.finish_job(job["id"], JobState.SUCCEEDED, exit_code=0)
 
     async def _run_inspect(self, job: Any) -> None:
@@ -782,6 +892,14 @@ class JobWorker:
                     "create_recovery_archive": bool(
                         follow_up.get("create_recovery_archive")
                     ),
+                    "backup_mode": str(
+                        follow_up.get(
+                            "backup_mode",
+                            "both"
+                            if follow_up.get("create_recovery_archive")
+                            else "full_only",
+                        )
+                    ),
                 },
                 approved_by="local:auto",
             )
@@ -797,19 +915,27 @@ class JobWorker:
                 str(self.settings.retention_days),
             )
         )
-        backups = await asyncio.to_thread(
-            discover_all_backups,
+        backup_sets = await asyncio.to_thread(
+            discover_backup_sets,
             self.settings.media_roots,
             retention_days,
             now=datetime.now(UTC),
         )
-        current = {backup.selection_key: backup for backup in backups}
+        current: dict[tuple[str, str], Any] = {}
+        for backup_set in backup_sets:
+            if backup_set.full:
+                current[("full", backup_set.full.selection_key)] = backup_set.full
+            if backup_set.compact:
+                current[("compact", backup_set.compact.selection_key)] = (
+                    backup_set.compact
+                )
         failures: list[str] = []
         for requested in payload.get("backups", []):
+            kind = str(requested.get("kind") or "full")
             relative_path = str(requested["relative_path"])
             root_id = str(requested.get("root_id") or "default")
             selection_key = f"{root_id}:{relative_path}"
-            backup = current.get(selection_key)
+            backup = current.get((kind, selection_key))
             retention_override = bool(requested.get("retention_override"))
             can_delete = bool(
                 backup
@@ -818,23 +944,9 @@ class JobWorker:
                     or (retention_override and backup.counterpart_exists)
                 )
             )
-            recovery_approved = False
-            if backup is not None and requested.get("recovery_archive_path"):
-                archive_path = backup.recovery_archive_path
-                recovery_approved = bool(
-                    backup.recovery_archive_valid
-                    and archive_path is not None
-                    and archive_path.stat().st_size
-                    == int(requested["recovery_archive_size"])
-                    and archive_path.stat().st_mtime_ns
-                    == int(requested["recovery_archive_mtime_ns"])
-                )
-            elif requested.get("no_recovery_acknowledged") is True:
-                recovery_approved = True
             if (
                 backup is None
                 or not can_delete
-                or not recovery_approved
                 or backup.size != int(requested["size"])
                 or backup.mtime_ns != int(requested["mtime_ns"])
             ):

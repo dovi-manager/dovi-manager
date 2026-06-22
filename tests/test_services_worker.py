@@ -142,6 +142,132 @@ def test_worker_runs_mel_conversion_and_deactivates_candidate(
     assert repository.get_candidate(candidate_id)["active"] == 0
 
 
+def test_default_compact_only_conversion_removes_full_original(
+    settings: Settings,
+    repository: Repository,
+) -> None:
+    candidate_id, path = add_candidate(settings, repository, CandidateCategory.MEL)
+    job_id = JobService(settings, repository).queue_conversion(
+        candidate_id,
+        approved=True,
+        approved_by="tester",
+    )
+
+    async def no_sleep(_: float) -> None:
+        pass
+
+    asyncio.run(
+        JobWorker(settings, repository, runner=FakeRunner(), sleep=no_sleep).run_once()
+    )
+
+    payload = json.loads(repository.get_job(job_id)["payload_json"])
+    assert payload["backup_mode"] == "compact_only"
+    assert path.with_suffix(".dovi").is_file()
+    assert not path.with_suffix(".mkv.bak.dovi_convert").exists()
+
+
+def test_both_backup_mode_retains_full_and_compact(
+    settings: Settings,
+    repository: Repository,
+) -> None:
+    candidate_id, path = add_candidate(settings, repository, CandidateCategory.MEL)
+    JobService(settings, repository).queue_conversion(
+        candidate_id,
+        approved=True,
+        approved_by="tester",
+        backup_mode="both",
+    )
+
+    async def no_sleep(_: float) -> None:
+        pass
+
+    asyncio.run(
+        JobWorker(settings, repository, runner=FakeRunner(), sleep=no_sleep).run_once()
+    )
+
+    assert path.with_suffix(".dovi").is_file()
+    assert path.with_suffix(".mkv.bak.dovi_convert").is_file()
+
+
+def test_full_recovery_replaces_converted_and_consumes_compact(
+    settings: Settings,
+    repository: Repository,
+) -> None:
+    converted = settings.media_root / "Movie.mkv"
+    converted.write_bytes(b"converted")
+    full = settings.media_root / "Movie.mkv.bak.dovi_convert"
+    full.write_bytes(b"original")
+    compact = settings.media_root / "Movie.dovi"
+    write_recovery_archive(compact)
+    current_stat = converted.stat()
+    full_stat = full.stat()
+    compact_stat = compact.stat()
+    JobService(settings, repository).queue_recovery_restore(
+        root_id="default",
+        converted_relative_path=converted.name,
+        converted_size=current_stat.st_size,
+        converted_mtime_ns=current_stat.st_mtime_ns,
+        recovery_kind="full",
+        recovery_relative_path=full.name,
+        recovery_size=full_stat.st_size,
+        recovery_mtime_ns=full_stat.st_mtime_ns,
+        compact_relative_path=compact.name,
+        compact_size=compact_stat.st_size,
+        compact_mtime_ns=compact_stat.st_mtime_ns,
+        approved=True,
+        approved_by="tester",
+    )
+
+    async def no_sleep(_: float) -> None:
+        pass
+
+    asyncio.run(
+        JobWorker(settings, repository, runner=FakeRunner(), sleep=no_sleep).run_once()
+    )
+
+    assert converted.read_bytes() == b"original"
+    assert full.read_bytes() == b"original"
+    assert not compact.exists()
+
+
+def test_compact_recovery_replaces_converted_and_consumes_archive(
+    settings: Settings,
+    repository: Repository,
+) -> None:
+    converted = settings.media_root / "Movie.mkv"
+    converted.write_bytes(b"converted")
+    compact = settings.media_root / "Movie.dovi"
+    write_recovery_archive(compact)
+    current_stat = converted.stat()
+    compact_stat = compact.stat()
+    JobService(settings, repository).queue_recovery_restore(
+        root_id="default",
+        converted_relative_path=converted.name,
+        converted_size=current_stat.st_size,
+        converted_mtime_ns=current_stat.st_mtime_ns,
+        recovery_kind="compact",
+        recovery_relative_path=compact.name,
+        recovery_size=compact_stat.st_size,
+        recovery_mtime_ns=compact_stat.st_mtime_ns,
+        compact_relative_path=compact.name,
+        compact_size=compact_stat.st_size,
+        compact_mtime_ns=compact_stat.st_mtime_ns,
+        approved=True,
+        approved_by="tester",
+    )
+
+    async def no_sleep(_: float) -> None:
+        pass
+
+    asyncio.run(
+        JobWorker(settings, repository, runner=FakeRunner(), sleep=no_sleep).run_once()
+    )
+
+    assert converted.read_bytes() == b"restored"
+    assert not compact.exists()
+    assert not (settings.media_root / "Movie.restored.mkv").exists()
+
+
 def test_worker_failure_preserves_candidate(
     settings: Settings,
     repository: Repository,
