@@ -116,9 +116,7 @@ class JobService:
                 raise ValueError("invalid backup mode") from exc
         elif create_recovery_archive is not None:
             effective_mode = (
-                BackupMode.BOTH
-                if create_recovery_archive
-                else BackupMode.FULL_ONLY
+                BackupMode.BOTH if create_recovery_archive else BackupMode.FULL_ONLY
             )
         else:
             effective_mode = runtime.backup_mode

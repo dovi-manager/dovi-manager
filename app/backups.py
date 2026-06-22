@@ -210,9 +210,7 @@ def discover_backup_sets(
     now: datetime | None = None,
 ) -> list[BackupSet]:
     full_backups = discover_all_backups(roots, retention_days, now=now)
-    compact_archives = discover_all_recovery_archives(
-        roots, retention_days, now=now
-    )
+    compact_archives = discover_all_recovery_archives(roots, retention_days, now=now)
     grouped: dict[tuple[str, str], dict[str, BackupFile | RecoveryArchive]] = {}
     labels = {root.id: root.label for root in roots}
 

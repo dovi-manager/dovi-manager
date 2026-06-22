@@ -17,7 +17,14 @@ from fastapi.templating import Jinja2Templates
 
 from app.automation import AutomationCoordinator
 from app.config import Settings
-from app.models import BackupFile, BackupSet, CandidateCategory, JobKind, JobState, RecoveryArchive
+from app.models import (
+    BackupFile,
+    BackupSet,
+    CandidateCategory,
+    JobKind,
+    JobState,
+    RecoveryArchive,
+)
 from app.readiness import check_readiness
 from app.repository import Repository
 from app.security import csrf_token, verify_csrf_token

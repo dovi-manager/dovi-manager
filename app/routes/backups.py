@@ -27,7 +27,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         )
         return runtime, sets
 
-    async def selected_set(selection_key: str) -> tuple[RuntimeSettings, BackupSet | None]:
+    async def selected_set(
+        selection_key: str,
+    ) -> tuple[RuntimeSettings, BackupSet | None]:
         runtime, sets = await discover_for_runtime()
         return runtime, next(
             (item for item in sets if item.selection_key == selection_key), None
@@ -51,7 +53,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
     async def manage_backup(request: Request, item: str) -> Response:
         runtime, selected = await selected_set(item)
         if selected is None:
-            return redirect_with_message("/backups", "Backup set not found.", error=True)
+            return redirect_with_message(
+                "/backups", "Backup set not found.", error=True
+            )
         return ctx.render(
             request,
             "backup_manage.html",
@@ -68,7 +72,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
     ) -> Response:
         _, selected = await selected_set(item)
         if selected is None:
-            return redirect_with_message("/backups", "Backup set not found.", error=True)
+            return redirect_with_message(
+                "/backups", "Backup set not found.", error=True
+            )
         artifact = selected.full if kind is BackupKind.FULL else selected.compact
         if artifact is None:
             return redirect_with_message(
@@ -133,18 +139,22 @@ def register(app: FastAPI, ctx: AppContext) -> None:
     ) -> RedirectResponse:
         _, backup_set = await selected_set(selected)
         if backup_set is None:
-            return redirect_with_message("/backups", "Backup set not found.", error=True)
+            return redirect_with_message(
+                "/backups", "Backup set not found.", error=True
+            )
         artifact = (
-            backup_set.full
-            if recovery_kind is BackupKind.FULL
-            else backup_set.compact
+            backup_set.full if recovery_kind is BackupKind.FULL else backup_set.compact
         )
         if artifact is None:
-            return redirect_with_message("/backups", "Recovery type unavailable.", error=True)
+            return redirect_with_message(
+                "/backups", "Recovery type unavailable.", error=True
+            )
         if recovery_kind is BackupKind.COMPACT and (
             not backup_set.compact.valid or not backup_set.counterpart_exists
         ):
-            return redirect_with_message("/backups", "Compact recovery unavailable.", error=True)
+            return redirect_with_message(
+                "/backups", "Compact recovery unavailable.", error=True
+            )
 
         root = ctx.settings.media_root_by_id(backup_set.root_id)
         current = backup_set.counterpart_path
@@ -200,10 +210,14 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         kind: str,
     ) -> Response:
         if kind not in {"full", "compact", "both"}:
-            return redirect_with_message("/backups", "Invalid deletion type.", error=True)
+            return redirect_with_message(
+                "/backups", "Invalid deletion type.", error=True
+            )
         runtime, selected = await selected_set(item)
         if selected is None:
-            return redirect_with_message("/backups", "Backup set not found.", error=True)
+            return redirect_with_message(
+                "/backups", "Backup set not found.", error=True
+            )
         artifacts = [
             artifact
             for artifact in (
@@ -220,8 +234,10 @@ def register(app: FastAPI, ctx: AppContext) -> None:
                 "One or more selected backups are still protected by retention.",
                 error=True,
             )
-        remaining = (1 if selected.full else 0) + (1 if selected.compact else 0) - len(
-            artifacts
+        remaining = (
+            (1 if selected.full else 0)
+            + (1 if selected.compact else 0)
+            - len(artifacts)
         )
         return ctx.render(
             request,
@@ -244,10 +260,14 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         _: None = Depends(ctx.require_csrf),
     ) -> RedirectResponse:
         if deletion_kind not in {"full", "compact", "both"} or approved != "yes":
-            return redirect_with_message("/backups", "Deletion confirmation required.", error=True)
+            return redirect_with_message(
+                "/backups", "Deletion confirmation required.", error=True
+            )
         runtime, backup_set = await selected_set(selected)
         if backup_set is None:
-            return redirect_with_message("/backups", "Backup set not found.", error=True)
+            return redirect_with_message(
+                "/backups", "Backup set not found.", error=True
+            )
         pairs = [
             ("full", backup_set.full if deletion_kind in {"full", "both"} else None),
             (
@@ -259,7 +279,9 @@ def register(app: FastAPI, ctx: AppContext) -> None:
         if not chosen or any(
             not artifact_is_selectable(runtime, artifact) for _, artifact in chosen
         ):
-            return redirect_with_message("/backups", "Selected backup is protected.", error=True)
+            return redirect_with_message(
+                "/backups", "Selected backup is protected.", error=True
+            )
         remaining = (
             (1 if backup_set.full else 0)
             + (1 if backup_set.compact else 0)

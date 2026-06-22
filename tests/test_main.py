@@ -890,9 +890,9 @@ def test_conversion_risk_warning_is_only_on_conversion_reviews() -> None:
     assert "Verify the converted file before deleting the full original" in conversion
     assert "Verify every converted file before deleting its full original" in bulk
     for name in ("dashboard.html", "candidates.html", "candidate_detail.html"):
-        assert "Classification is not definitive" not in (
-            templates / name
-        ).read_text(encoding="utf-8")
+        assert "Classification is not definitive" not in (templates / name).read_text(
+            encoding="utf-8"
+        )
         assert "scan estimates" not in (templates / name).read_text(encoding="utf-8")
 
 
