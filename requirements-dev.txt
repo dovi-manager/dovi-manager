@@ -1,5 +1,5 @@
 -r requirements.txt
 
-httpx2>=2.4.0,<3.0
-pytest>=9.1.0,<10.0
-ruff>=0.15.17,<1.0
+httpx2>=2.5.0,<3.0
+pytest>=9.1.1,<10.0
+ruff>=0.15.20,<1.0
